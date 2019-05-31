@@ -1,5 +1,5 @@
 #!/bin/bash
-eval $(attach -Padd -b -f scala)
+# eval $(attach -Padd -b -f scala)
 gitroot=$(git rev-parse --show-toplevel)
 if [ -n "$JAVA_TOOL_OPTIONS" ]; then
   export JAVA_OPTS="$JAVA_TOOL_OPTIONS"
