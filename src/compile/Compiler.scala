@@ -70,20 +70,20 @@ object Compiler {
     try {
       inputStream = new java.io.FileInputStream(fileName)
     } catch {
-      case f: FileNotFoundException => { Console.err.println("File " + fileName + " does not exist"); return null }
+      case _: FileNotFoundException => Console.err.println("File " + fileName + " does not exist"); return null
     }
     try {
       val scanner = new DecafScanner(new DataInputStream(inputStream))
-      val parser = new DecafParser(scanner);
+      val parser = new DecafParser(scanner)
 
       parser.setTrace(CLI.debug)
       parser.program()
-      val t = parser.getAST().asInstanceOf[CommonAST]
-      if (parser.getError()) {
-        print("[ERROR] Parse failed\n")
+      val t = parser.getAST.asInstanceOf[CommonAST]
+      if (parser.getError) {
+        println("[ERROR] Parse failed:")
         return null
       } else if (CLI.debug){
-        print(t.toStringList())
+        print(t.toStringList)
       }
       t
     } catch {
