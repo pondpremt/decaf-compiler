@@ -7,6 +7,7 @@ import scala.Console
 
 // Begin parser/scanner imports
 import antlr.CommonAST
+import antlr.collections.AST
 import edu.mit.compilers.grammar.{DecafParser, DecafScanner, DecafScannerTokenTypes}
 
 object Compiler {
@@ -39,12 +40,11 @@ object Compiler {
       val inputStream: FileInputStream = new java.io.FileInputStream(fileName)
       val scanner = new DecafScanner(new DataInputStream(inputStream))
       scanner.setTrace(CLI.debug)
-      var done = false
-      while (!done) {
+      while (true) {
         try {
           val head = scanner.nextToken()
           if (head.getType == DecafScannerTokenTypes.EOF) {
-            done = true
+            return
           } else {
             val tokenType = tokenMap.getOrElse(head.getType, "")
             outFile.println(head.getLine + (if (tokenType ==  "") "" else " ") + tokenType + " " + head.getText)
@@ -61,7 +61,7 @@ object Compiler {
     }
   }
 
-  def parse(fileName: String): CommonAST  = {
+  def parse(fileName: String): CommonAST = {
     /**
       * Parse the file specified by the filename. Eventually, this method
       * may return a type specific to your compiler.
@@ -83,12 +83,22 @@ object Compiler {
         println("[ERROR] Parse failed:")
         return null
       } else if (CLI.debug){
-        print(t.toStringList)
+        traverseParseTree(t, "")
       }
       t
     } catch {
       case e: Exception => Console.err.println(CLI.infile + " " + e)
         null
+    }
+  }
+
+  def traverseParseTree(tree: AST, indentation: String) {
+    println(indentation + "Node: " + tree.getText + " " + tree.getType)
+    if (tree.getFirstChild != null) {
+      traverseParseTree(tree.getFirstChild, indentation + "  ")
+    }
+    if (tree.getNextSibling != null) {
+      traverseParseTree(tree.getNextSibling, indentation)
     }
   }
 }
