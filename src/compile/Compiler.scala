@@ -11,7 +11,7 @@ import antlr.collections.AST
 import edu.mit.compilers.grammar.{DecafParser, DecafScanner, DecafScannerTokenTypes}
 
 object Compiler {
-  val tokenMap = Map(
+  private val tokenMap = Map(
     DecafScannerTokenTypes.ID -> "IDENTIFIER",
     DecafScannerTokenTypes.CHAR_LITERAL -> "CHARLITERAL",
     DecafScannerTokenTypes.STRING_LITERAL -> "STRINGLITERAL",
@@ -19,19 +19,15 @@ object Compiler {
     DecafScannerTokenTypes.TK_true -> "BOOLEANLITERAL",
     DecafScannerTokenTypes.TK_false -> "BOOLEANLITERAL")
 
-  var outFile = if (CLI.outfile == null) Console.out else new java.io.PrintStream(
+  private var outFile = if (CLI.outfile == null) Console.out else new java.io.PrintStream(
     new java.io.FileOutputStream(CLI.outfile))
 
   def main(args: Array[String]): Unit = {
-    CLI.parse(args, Array[String]());
-    if (CLI.target == CLI.Action.SCAN) {
-      scan(CLI.infile)
-      System.exit(0)
-    } else if (CLI.target == CLI.Action.PARSE) {
-      if(parse(CLI.infile) == null) {
-        System.exit(1)
-      }
-      System.exit(0)
+    CLI.parse(args, Array[String]())
+    CLI.target match {
+      case CLI.Action.SCAN => scan(CLI.infile); System.exit(0)
+      case CLI.Action.PARSE => if (parse(CLI.infile) == null) System.exit(1) else System.exit(0)
+      case CLI.Action.INTER => if (inter(CLI.infile) == null) System.exit(1) else System.exit(0)
     }
   }
 
@@ -39,7 +35,6 @@ object Compiler {
     try {
       val inputStream: FileInputStream = new java.io.FileInputStream(fileName)
       val scanner = new DecafScanner(new DataInputStream(inputStream))
-      scanner.setTrace(CLI.debug)
       while (true) {
         try {
           val head = scanner.nextToken()
@@ -50,10 +45,9 @@ object Compiler {
             outFile.println(head.getLine + (if (tokenType ==  "") "" else " ") + tokenType + " " + head.getText)
           }
         } catch {
-          case ex: Exception => {
+          case ex: Exception =>
             Console.err.println(CLI.infile + " " + ex)
             scanner.consume()
-          }
         }
       }
     } catch {
@@ -76,7 +70,6 @@ object Compiler {
       val scanner = new DecafScanner(new DataInputStream(inputStream))
       val parser = new DecafParser(scanner)
 
-      parser.setTrace(CLI.debug)
       parser.program()
       val t = parser.getAST.asInstanceOf[CommonAST]
       if (parser.getError) {
@@ -100,5 +93,14 @@ object Compiler {
     if (tree.getNextSibling != null) {
       traverseParseTree(tree.getNextSibling, indentation)
     }
+  }
+
+  def inter(fileName: String): ir.Program = {
+    val parseTree = parse(fileName)
+    if (parseTree == null) {
+      return null
+    }
+    val program = ASTBuilder.buildProgram(parseTree)
+    program
   }
 }

@@ -18,11 +18,13 @@ options
 
 tokens
 {
+    PROGRAM;
     METHOD_CALL;
     ASSIGNMENT;
     BLOCK;
     LOCATION;
     METHOD_DECL;
+    METHOD_PARAMS;
     FIELD_DECL;
     FIELD_ID;
 }
@@ -72,7 +74,7 @@ tokens
 }
 
 
-program      : (callout_decl)* (field_decl)* (method_decl)* EOF;
+program      : (callout_decl)* (field_decl)* (method_decl)* EOF! {#program = #([PROGRAM], #program);};
 
 callout_decl : TK_callout^ ID SEMICOLON!;
 
@@ -81,9 +83,9 @@ field_decl   : type field_id (COMMA! field_id)* SEMICOLON!
 protected field_id : ID (LSQUARE! INT_LITERAL RSQUARE!)?
                      {#field_id = #([FIELD_ID], #field_id);};
 
-method_decl  : (type | TK_void) ID LPAREN! (method_param (COMMA! method_param)*)? RPAREN! block
+method_decl  : (type | TK_void) ID LPAREN! method_params RPAREN! block
                {#method_decl = #([METHOD_DECL], #method_decl);};
-protected method_param : type ID;
+protected method_params : (type ID (COMMA! type ID)*)? {#method_params = #([METHOD_PARAMS], #method_params);};
 
 block        : LCURLY! (field_decl)* (statement)* RCURLY!
                {#block = #([BLOCK], #block);};
