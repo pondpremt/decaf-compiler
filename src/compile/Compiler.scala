@@ -1,6 +1,8 @@
 package compile
 import java.io._
 
+import antlr.ASTFactory
+import parsing.{TreeParser, ParseTree}
 import util.CLI
 
 import scala.Console
@@ -55,7 +57,7 @@ object Compiler {
     }
   }
 
-  def parse(fileName: String): CommonAST = {
+  def parse(fileName: String): ParseTree = {
     /**
       * Parse the file specified by the filename. Eventually, this method
       * may return a type specific to your compiler.
@@ -70,8 +72,12 @@ object Compiler {
       val scanner = new DecafScanner(new DataInputStream(inputStream))
       val parser = new DecafParser(scanner)
 
+      val factory =  new ASTFactory()
+      factory.setASTNodeClass(classOf[ParseTree])
+      parser.setASTFactory(factory)
+
       parser.program()
-      val t = parser.getAST.asInstanceOf[CommonAST]
+      val t = parser.getAST.asInstanceOf[ParseTree]
       if (parser.getError) {
         println("[ERROR] Parse failed:")
         return null
@@ -86,7 +92,7 @@ object Compiler {
   }
 
   def traverseParseTree(tree: AST, indentation: String) {
-    println(indentation + "Node: " + tree.getText + " " + tree.getType)
+    println(indentation + "Node: " + tree.getText + " " + tree.getType + " at " + tree.getLine + " : " + tree.getColumn)
     if (tree.getFirstChild != null) {
       traverseParseTree(tree.getFirstChild, indentation + "  ")
     }
@@ -96,11 +102,7 @@ object Compiler {
   }
 
   def inter(fileName: String): ir.Program = {
-    val parseTree = parse(fileName)
-    if (parseTree == null) {
-      return null
-    }
-    val program = ASTBuilder.buildProgram(parseTree)
-    program
+    implicit val parseTree: ParseTree = parse(fileName)
+    if (parseTree == null) null else TreeParser.parseProgram
   }
 }

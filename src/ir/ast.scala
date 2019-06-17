@@ -1,85 +1,150 @@
 package ir
 
-case class Program(callouts: List[CalloutDecl], fields: List[FieldDecl], methods: List[MethodDecl])
+sealed abstract class Ir(implicit src: Source) {
+  def getSite: Option[(Int, Int)] = src.getSite
+}
 
-case class CalloutDecl(id: ID)
+case class Program(callouts: List[CalloutDecl],
+                   fields: List[FieldDecl],
+                   methods: List[MethodDecl])
+                  (implicit src: Source) extends Ir
 
-case class FieldDecl(typ: Type, ids: List[VarDecl])
+case class CalloutDecl(id: ID)(implicit src: Source) extends Ir
 
-case class MethodDecl(typ: Option[Type], id: ID, params: List[ParamDecl], body: Block)
+case class FieldDecl(typ: Type, ids: List[VarDecl])(implicit src: Source) extends Ir
 
-case class ParamDecl(paramType: Type, paramId: ID)
+case class MethodDecl(typ: Option[Type], id: ID, params: List[ParamDecl], body: Block)(implicit src: Source) extends Ir
 
-case class Block(fields: List[FieldDecl], stmt: List[Stmt])
+case class ParamDecl(paramType: Type, paramId: ID)(implicit src: Source) extends Ir
 
-sealed abstract class Stmt
+case class Block(fields: List[FieldDecl], stmts: List[Stmt])(implicit src: Source) extends Ir
+
+sealed abstract class Stmt(implicit src: Source) extends Ir
+
 object Stmt {
-  final case class Assign(location: Location, e: Expr) extends Stmt
-  final case class PlusAssign(location: Location, e: Expr) extends Stmt
-  final case class MinusAssign(location: Location, e: Expr) extends Stmt
-  final case class CallStmt(call: Expr.Call) extends Stmt
-  final case class Cond(p: Expr, t: Block, f: Option[Block]) extends Stmt
-  final case class For(index: ID, start: Expr, stop: Expr, step: Option[Expr], body: Block) extends Stmt
-  final case class While(cond: Expr, body: Block) extends Stmt
-  final case class Return(value: Option[Expr]) extends Stmt
-  final case object Break extends Stmt
-  final case object Continue extends Stmt
+
+  final case class Assign(location: Location, e: Expr)(implicit src: Source) extends Stmt
+
+  final case class PlusAssign(location: Location, e: Expr)(implicit src: Source) extends Stmt
+
+  final case class MinusAssign(location: Location, e: Expr)(implicit src: Source) extends Stmt
+
+  final case class CallStmt(call: MethodCall)(implicit src: Source) extends Stmt
+
+  final case class Cond(p: Expr, t: Block, f: Option[Block])(implicit src: Source) extends Stmt
+
+  final case class For(index: ID, start: Expr, stop: Expr, step: Int, body: Block)(implicit src: Source)
+    extends Stmt
+
+  final case class While(cond: Expr, body: Block)(implicit src: Source) extends Stmt
+
+  final case class Return(value: Option[Expr])(implicit src: Source) extends Stmt
+
+  final case class Break(implicit src: Source) extends Stmt
+
+  final case class Continue(implicit src: Source) extends Stmt
+
 }
 
-sealed abstract class Location
+sealed abstract class Location(implicit src: Source) extends Ir
+
 object Location {
-  final case class Var(id: ID) extends Location
-  final case class Cell(id: ID, index: Expr) extends Location
+
+  final case class Var(id: ID)(implicit src: Source) extends Location
+
+  final case class Cell(id: ID, index: Expr)(implicit src: Source) extends Location
+
 }
 
-sealed abstract class Expr
+sealed abstract class Expr(implicit src: Source) extends Ir
+
 object Expr {
-  final case class Ternary(p: Expr, t: Expr, f: Expr) extends Expr
-  final case class BinaryOp(op: Op, arg1: Expr, arg2: Expr) extends Expr
-  final case class UnaryOp(op: Op, arg: Expr) extends Expr
-  final case class Load(loc: Location) extends Expr
-  final case class Call(method: ID, args: List[MethodArg]) extends Expr
-  final case class Length(id: ID) extends Expr
-  final case class LitInt(value: Int) extends Expr
-  final case class LitBool(value: Boolean) extends Expr
-  final case class LitChar(value: Char) extends Expr
+
+  final case class Ternary(p: Expr, t: Expr, f: Expr)(implicit src: Source) extends Expr
+
+  final case class BinaryOp(op: Op, arg1: Expr, arg2: Expr)(implicit src: Source) extends Expr
+
+  final case class UnaryOp(op: Op, arg: Expr)(implicit src: Source) extends Expr
+
+  final case class Load(loc: Location)(implicit src: Source) extends Expr
+
+  final case class Call(call: MethodCall)(implicit src: Source) extends Expr
+
+  final case class Length(id: ID)(implicit src: Source) extends Expr
+
+  final case class LitInt(value: Int)(implicit src: Source) extends Expr
+
+  final case class LitBool(value: Boolean)(implicit src: Source) extends Expr
+
+  final case class LitChar(value: Char)(implicit src: Source) extends Expr
+
 }
 
-sealed abstract class MethodArg
+case class MethodCall(method: ID, args: List[MethodArg])(implicit src: Source) extends Ir
+
+sealed abstract class MethodArg(implicit src: Source) extends Ir
+
 object MethodArg {
-  final case class ExprArg(e: Expr) extends MethodArg
-  final case class StringArg(s: String) extends MethodArg
+
+  final case class ExprArg(e: Expr)(implicit src: Source) extends MethodArg
+
+  final case class StringArg(s: String)(implicit src: Source) extends MethodArg
+
 }
 
-case class ID(name: String)
+case class ID(name: String)(implicit src: Source)
 
-sealed abstract class VarDecl
+sealed abstract class VarDecl(implicit src: Source) extends Ir
+
 object VarDecl {
-  final case class IDDecl(id: ID) extends VarDecl
-  final case class IDArrayDecl(id: ID, size: Int) extends VarDecl
+
+  final case class IDDecl(id: ID)(implicit src: Source) extends VarDecl
+
+  final case class IDArrayDecl(id: ID, size: Int)(implicit src: Source) extends VarDecl
+
 }
 
-sealed abstract class Op
+sealed abstract class Op(implicit src: Source) extends Ir
+
 object Op {
-  final case object And extends Op
-  final case object Or extends Op
-  final case object Eqq extends Op
-  final case object Neq extends Op
-  final case object Lt extends Op
-  final case object Gt extends Op
-  final case object Lte extends Op
-  final case object Gte extends Op
-  final case object Plus extends Op
-  final case object Minus extends Op
-  final case object Times extends Op
-  final case object Div extends Op
-  final case object Mod extends Op
-  final case object Bang extends Op
+
+  final case class And(implicit src: Source) extends Op
+
+  final case class Or(implicit src: Source) extends Op
+
+  final case class Eqq(implicit src: Source) extends Op
+
+  final case class Neq(implicit src: Source) extends Op
+
+  final case class Lt(implicit src: Source) extends Op
+
+  final case class Gt(implicit src: Source) extends Op
+
+  final case class Lte(implicit src: Source) extends Op
+
+  final case class Gte(implicit src: Source) extends Op
+
+  final case class Plus(implicit src: Source) extends Op
+
+  final case class Minus(implicit src: Source) extends Op
+
+  final case class Times(implicit src: Source) extends Op
+
+  final case class Div(implicit src: Source) extends Op
+
+  final case class Mod(implicit src: Source) extends Op
+
+  final case class Bang(implicit src: Source) extends Op
+
 }
 
-sealed abstract class Type
+sealed abstract class Type(implicit src: Source) extends Ir
+
 object Type {
-  final case object IntT extends Type
-  final case object BooleanT extends Type
+
+  final case class IntT(implicit src: Source) extends Type
+
+  final case class BooleanT(implicit src: Source) extends Type
+
 }
 
