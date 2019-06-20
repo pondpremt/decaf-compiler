@@ -1,7 +1,9 @@
 package ir
 
 sealed abstract class Ir(implicit src: Source) {
+
   def getSite: Option[(Int, Int)] = src.getSite
+
 }
 
 case class Program(callouts: List[CalloutDecl],
@@ -11,11 +13,11 @@ case class Program(callouts: List[CalloutDecl],
 
 case class CalloutDecl(id: ID)(implicit src: Source) extends Ir
 
-case class FieldDecl(typ: Type, ids: List[VarDecl])(implicit src: Source) extends Ir
+case class FieldDecl(typ: IrType, ids: List[VarDecl])(implicit src: Source) extends Ir
 
-case class MethodDecl(typ: Option[Type], id: ID, params: List[ParamDecl], body: Block)(implicit src: Source) extends Ir
+case class MethodDecl(typ: IrVoidableType, id: ID, params: List[ParamDecl], body: Block)(implicit src: Source) extends Ir
 
-case class ParamDecl(paramType: Type, paramId: ID)(implicit src: Source) extends Ir
+case class ParamDecl(paramType: IrType, paramId: ID)(implicit src: Source) extends Ir
 
 case class Block(fields: List[FieldDecl], stmts: List[Stmt])(implicit src: Source) extends Ir
 
@@ -138,13 +140,7 @@ object Op {
 
 }
 
-sealed abstract class Type(implicit src: Source) extends Ir
+final case class IrType(typ: PrimitiveType)(implicit src: Source) extends Ir
 
-object Type {
-
-  final case class IntT(implicit src: Source) extends Type
-
-  final case class BooleanT(implicit src: Source) extends Type
-
-}
+final case class IrVoidableType(typ: VoidableType)(implicit src: Source) extends Ir
 

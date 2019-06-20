@@ -24,9 +24,9 @@ object TreeParser {
     ir.FieldDecl(typ, ids)
   }
 
-  def parseType(implicit node: ParseTree): ir.Type = node.getType match {
-    case DecafParserTokenTypes.TK_int => ir.Type.IntT()
-    case DecafParserTokenTypes.TK_boolean => ir.Type.BooleanT()
+  def parseType(implicit node: ParseTree): ir.IrType = node.getType match {
+    case DecafParserTokenTypes.TK_int => ir.IrType(ir.PrimitiveType.IntT)
+    case DecafParserTokenTypes.TK_boolean => ir.IrType(ir.PrimitiveType.BoolT)
   }
 
   def parseFieldId(implicit node: ParseTree): ir.VarDecl = {
@@ -39,8 +39,9 @@ object TreeParser {
 
   def parseMethodDecl(implicit node: ParseTree): ir.MethodDecl = {
     val typ = node.getChild(0).getType match {
-      case DecafParserTokenTypes.TK_void => Option.empty
-      case _ => Option.apply(parseType(node.getChild(0)))
+      case DecafParserTokenTypes.TK_void => ir.IrVoidableType(ir.VoidableType.VoidT)
+      case DecafParserTokenTypes.TK_int => ir.IrVoidableType(ir.VoidableType.Primitive(ir.PrimitiveType.IntT))
+      case DecafParserTokenTypes.TK_boolean => ir.IrVoidableType(ir.VoidableType.Primitive(ir.PrimitiveType.BoolT))
     }
     val id = parseId(node.getChild(1))
     val params = node.getChild(2).map(0, 0, 2) { n =>
