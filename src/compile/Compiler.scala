@@ -2,7 +2,8 @@ package compile
 import java.io._
 
 import antlr.ASTFactory
-import parsing.{TreeParser, ParseTree}
+import ir.PrettyPrintListener
+import parsing.{ParseTree, TreeParser}
 import util.CLI
 
 import scala.Console
@@ -102,7 +103,11 @@ object Compiler {
   }
 
   def inter(fileName: String): ir.Program = {
-    implicit val parseTree: ParseTree = parse(fileName)
-    if (parseTree == null) null else TreeParser.parseProgram
+    val parseTree: ParseTree = parse(fileName)
+    if (parseTree == null) return null
+    val ast = TreeParser.parseProgram(parseTree)
+    val s = ir.Walk(PrettyPrintListener).walkProgram(ast)
+    println("PPrint\n" + s._2.head)
+    ast
   }
 }

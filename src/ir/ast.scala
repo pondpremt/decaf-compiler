@@ -42,9 +42,9 @@ object Stmt {
 
   final case class Return(value: Option[Expr])(implicit src: Source) extends Stmt
 
-  final case class Break(implicit src: Source) extends Stmt
+  final case class Break()(implicit src: Source) extends Stmt
 
-  final case class Continue(implicit src: Source) extends Stmt
+  final case class Continue()(implicit src: Source) extends Stmt
 
 }
 
@@ -94,7 +94,7 @@ object MethodArg {
 
 }
 
-case class ID(name: String)(implicit src: Source)
+case class ID(name: String)(implicit src: Source) extends Ir
 
 sealed abstract class VarDecl(implicit src: Source) extends Ir
 
@@ -110,33 +110,33 @@ sealed abstract class Op(implicit src: Source) extends Ir
 
 object Op {
 
-  final case class And(implicit src: Source) extends Op
+  final case class And()(implicit src: Source) extends Op
 
-  final case class Or(implicit src: Source) extends Op
+  final case class Or()(implicit src: Source) extends Op
 
-  final case class Eqq(implicit src: Source) extends Op
+  final case class Eqq()(implicit src: Source) extends Op
 
-  final case class Neq(implicit src: Source) extends Op
+  final case class Neq()(implicit src: Source) extends Op
 
-  final case class Lt(implicit src: Source) extends Op
+  final case class Lt()(implicit src: Source) extends Op
 
-  final case class Gt(implicit src: Source) extends Op
+  final case class Gt()(implicit src: Source) extends Op
 
-  final case class Lte(implicit src: Source) extends Op
+  final case class Lte()(implicit src: Source) extends Op
 
-  final case class Gte(implicit src: Source) extends Op
+  final case class Gte()(implicit src: Source) extends Op
 
-  final case class Plus(implicit src: Source) extends Op
+  final case class Plus()(implicit src: Source) extends Op
 
-  final case class Minus(implicit src: Source) extends Op
+  final case class Minus()(implicit src: Source) extends Op
 
-  final case class Times(implicit src: Source) extends Op
+  final case class Times()(implicit src: Source) extends Op
 
-  final case class Div(implicit src: Source) extends Op
+  final case class Div()(implicit src: Source) extends Op
 
-  final case class Mod(implicit src: Source) extends Op
+  final case class Mod()(implicit src: Source) extends Op
 
-  final case class Bang(implicit src: Source) extends Op
+  final case class Bang()(implicit src: Source) extends Op
 
 }
 

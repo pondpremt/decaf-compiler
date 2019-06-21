@@ -25,29 +25,3 @@ object State {
   def put[S](s: S): State[S, Unit] = State(_ => ((), s))
 
 }
-
-object StackState {
-
-  type T[S, A] = State[List[S], A]
-
-  def push[S](s: S): T[S, Unit] = for {
-    ss <- State.get
-    _ <- State.put(s :: ss)
-  } yield ()
-
-  def pop[S](): T[S, S] = for {
-    ss <- State.get
-  } yield ss match {
-    case head :: tail => (head, tail)
-    case _ => throw new RuntimeException("StackState.pop called on an empty stack")
-  }
-
-  def top[S]: T[S, S] =
-    for {
-      s <- pop()
-      _ <- push(s)
-    } yield s
-
-}
-
-

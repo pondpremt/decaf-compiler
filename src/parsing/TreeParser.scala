@@ -92,6 +92,7 @@ object TreeParser {
   def parseExpr(implicit node: ParseTree): ir.Expr = node.getType match {
     case DecafParserTokenTypes.QUES => ir.Expr.Ternary(
       parseExpr(node.getChild(0)), parseExpr(node.getChild(1)), parseExpr(node.getChild(2)))
+    case DecafParserTokenTypes.AT => ir.Expr.Length(parseId(node.getChild(0)))
     case DecafParserTokenTypes.LOCATION => ir.Expr.Load(parseLocation)
     case DecafParserTokenTypes.METHOD_CALL =>ir.Expr.Call(parseMethodCall)
     case DecafParserTokenTypes.INT_LITERAL => ir.Expr.LitInt(node.getText.toInt)
