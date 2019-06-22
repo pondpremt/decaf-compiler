@@ -2,7 +2,7 @@ package ir
 
 sealed abstract class Ir(implicit src: Source) {
 
-  def getSite: Option[(Int, Int)] = src.getSite
+  def getSource: Source = src
 
 }
 

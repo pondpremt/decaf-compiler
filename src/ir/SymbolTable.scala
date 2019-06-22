@@ -1,10 +1,20 @@
 package ir
 
-final case class SymbolTable(parent: Option[SymbolTable], tab: Map[String, Descriptor])
+final case class SymbolTable(parent: Option[SymbolTable], tab: Map[String, Descriptor]) {
+
+  def put(s: String, d: Descriptor): SymbolTable = this.copy(tab = tab + ((s, d)))
+
+  def lookup(s: String): Option[Descriptor] = tab.get(s).orElse(parent.flatMap(_.lookup(s)))
+
+  def lookupLocal(s: String): Option[Descriptor] = tab.get(s)
+
+}
 
 object SymbolTable {
 
   def base: SymbolTable = SymbolTable(None, Map())
+
+  def make(parent: SymbolTable): SymbolTable = SymbolTable(Some(parent), Map())
 
 }
 

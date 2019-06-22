@@ -2,14 +2,13 @@ package compile
 import java.io._
 
 import antlr.ASTFactory
-import ir.PrettyPrintListener
+import ir.{BuildSTListener, PrettyPrintListener, STListenerPair, TypeChecker}
 import parsing.{ParseTree, TreeParser}
 import util.CLI
 
 import scala.Console
 
 // Begin parser/scanner imports
-import antlr.CommonAST
 import antlr.collections.AST
 import edu.mit.compilers.grammar.{DecafParser, DecafScanner, DecafScannerTokenTypes}
 
@@ -106,8 +105,13 @@ object Compiler {
     val parseTree: ParseTree = parse(fileName)
     if (parseTree == null) return null
     val ast = TreeParser.parseProgram(parseTree)
-    val s = ir.Walk(PrettyPrintListener).walkProgram(ast)
+    val s = ir.Walk(PrettyPrintListener).walkIr(ast)
     println("PPrint\n" + s._2.head)
+    val st = ir.Walk(BuildSTListener).walkIr(ast)
+    print("Symbol Tables\n" + st.toString() + "\n")
+    val checker = STListenerPair(BuildSTListener, TypeChecker)
+    val tc = ir.Walk(checker).walkIr(ast)
+    print("Semantic Errors:\n" + tc._2._2._1.map(_.toString).mkString("\n"))
     ast
   }
 }

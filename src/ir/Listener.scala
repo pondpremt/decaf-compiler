@@ -6,8 +6,8 @@ abstract class Listener[T] {
 
   def init: S
 
-  def enter(node: Ir): S => S
+  def enter(node: Ir, s: S): S
 
-  def leave(node: Ir): S => S
+  def leave(node: Ir, s: S): S
 
 }

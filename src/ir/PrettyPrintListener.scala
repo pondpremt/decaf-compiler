@@ -34,10 +34,13 @@ object PrettyPrintListener extends Listener[(String, List[String])] {
 
   def init: S = ("", Nil)
 
-  def enter(node: Ir): S => S = node match {
-    case _: Block => push("{\n") andThen (s => (s._1 + "    ", s._2))
-    case _ => identity[S]
+  def enter(node: Ir, s: S): S = node match {
+    case _: Block => (s._1 + "    ", "{\n" :: s._2)
+    case _ => s
   }
+
+  // Re-route to the curried implementation of leave
+  def leave(node: Ir, s: S): S = leave(node)(s)
 
   def leave(node: Ir): S => S = node match {
     case Program(callouts, fields, methods) =>
@@ -58,13 +61,13 @@ object PrettyPrintListener extends Listener[(String, List[String])] {
     case MethodArg.ExprArg(e) => identity[S]
     case MethodArg.StringArg(s) => push(s)
     case ID(name) => push(name)
-    case IrType(typ) => push(typeToString(typ))
-    case IrVoidableType(typ) => push(typeToString(typ))
+    case IrType(typ) => push(typ.toString)
+    case IrVoidableType(typ) => push(typ.toString)
+    case n: Op => push(opToString(n))
     case n: VarDecl => leave(n)
     case n: Block => leave(n)
     case n: Stmt => leave(n)
     case n: Expr => leave(n)
-    case n: Op => leave(n)
   }
 
   def leave(node: Block): S => S = ((s: S) => (s._1.dropRight(4), s._2)).andThen(
@@ -90,36 +93,28 @@ object PrettyPrintListener extends Listener[(String, List[String])] {
     case Expr.BinaryOp(_, _, _) => consume((op, arg1, arg2) => "(" + arg1 + " " + op + " " + arg2 + ")")
     case Expr.UnaryOp(_, _) => consume(_ + _)
     case Expr.Load(_) => identity[S]
-    case Expr.Call(call) => identity[S]
-    case Expr.Length(id) => consume("@" + _)
+    case Expr.Call(_) => identity[S]
+    case Expr.Length(_) => consume("@" + _)
     case Expr.LitInt(value) => push(value.toString)
     case Expr.LitBool(value) => push(value.toString)
     case Expr.LitChar(value) => push(value.toString)
   }
 
-  def leave(node: Op): S => S = node match {
-    case Op.And() => push("&&")
-    case Op.Or() => push("||")
-    case Op.Eqq() => push("==")
-    case Op.Neq() => push("!=")
-    case Op.Lt() => push("<")
-    case Op.Gt() => push(">")
-    case Op.Lte() => push("<=")
-    case Op.Gte() => push(">=")
-    case Op.Plus() => push("+")
-    case Op.Minus() => push("-")
-    case Op.Times() => push("*")
-    case Op.Div() => push("/")
-    case Op.Mod() => push("%")
-    case Op.Bang() => push("!")
-  }
-
-  def typeToString: Type => String = {
-    case PrimitiveType.IntT => "int"
-    case PrimitiveType.BoolT => "bool"
-    case VoidableType.VoidT => "void"
-    case VoidableType.Primitive(t) => typeToString(t)
-    case FunctionType(_, _) => throw new RuntimeException("Function type cannot be pretty printed")
+  def opToString: ir.Op => String = {
+    case ir.Op.And() => "&&"
+    case ir.Op.Or() => "||"
+    case ir.Op.Eqq() => "=="
+    case ir.Op.Neq() => "!="
+    case ir.Op.Lt() => "<"
+    case ir.Op.Gt() => ">"
+    case ir.Op.Lte() => "<="
+    case ir.Op.Gte() => ">="
+    case ir.Op.Plus() => "+"
+    case ir.Op.Minus() => "-"
+    case ir.Op.Times() => "*"
+    case ir.Op.Div() => "/"
+    case ir.Op.Mod() => "%"
+    case ir.Op.Bang() => "!"
   }
 
 }
