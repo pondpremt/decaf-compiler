@@ -2,7 +2,7 @@ package compile
 import java.io._
 
 import antlr.ASTFactory
-import ir.{BuildSTListener, PrettyPrintListener, STListenerPair, TypeChecker}
+import ir.{PrettyPrintListener, STBuilder, STListenerPair, TypeChecker}
 import parsing.{ParseTree, TreeParser}
 import util.CLI
 
@@ -104,14 +104,19 @@ object Compiler {
   def inter(fileName: String): ir.Program = {
     val parseTree: ParseTree = parse(fileName)
     if (parseTree == null) return null
+
     val ast = TreeParser.parseProgram(parseTree)
-    val s = ir.Walk(PrettyPrintListener).walkIr(ast)
-    println("PPrint\n" + s._2.head)
-    val st = ir.Walk(BuildSTListener).walkIr(ast)
-    print("Symbol Tables\n" + st.toString() + "\n")
-    val checker = STListenerPair(BuildSTListener, TypeChecker)
+
+    if (CLI.debug) {
+      val s = ir.Walk(PrettyPrintListener).walkIr(ast)
+      println("PPrint\n" + s._2.head)
+      val st = ir.Walk(STBuilder).walkIr(ast)
+      print("Symbol Tables\n" + st.toString() + "\n")
+    }
+
+    val checker = STListenerPair(STBuilder, TypeChecker)
     val tc = ir.Walk(checker).walkIr(ast)
-    print("Semantic Errors:\n" + tc._2._2._1.map(_.toString).mkString("\n"))
+    print(tc._2._2._1.reverse.map(_.toString).mkString("\n"))
     ast
   }
 }

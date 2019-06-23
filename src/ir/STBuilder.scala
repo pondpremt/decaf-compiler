@@ -1,6 +1,6 @@
 package ir
 
-object BuildSTListener extends STListener[List[SymbolTable]] {
+object STBuilder extends STListener[List[SymbolTable]] {
 
   def initState: List[SymbolTable] = Nil
 
