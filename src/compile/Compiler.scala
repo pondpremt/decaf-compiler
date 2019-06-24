@@ -2,7 +2,7 @@ package compile
 import java.io._
 
 import antlr.ASTFactory
-import ir.{PrettyPrintListener, STBuilder, STListenerPair, TypeChecker}
+import ir._
 import parsing.{ParseTree, TreeParser}
 import util.CLI
 
@@ -114,9 +114,14 @@ object Compiler {
       print("Symbol Tables\n" + st.toString() + "\n")
     }
 
-    val checker = STListenerPair(STBuilder, TypeChecker)
+    val checker = STListenerPair(STBuilder,
+      STListenerPair(MustReturnChecker,
+        STListenerPair(BreakContChecker,
+          STListenerPair(LitIntChecker,
+            STListenerPair(IDChecker, TypeChecker)))))
     val tc = ir.Walk(checker).walkIr(ast)
-    print(tc._2._2._1.reverse.map(_.toString).mkString("\n"))
+    val errs = tc._2._1._1 ::: tc._2._2._1._1 ::: tc._2._2._2._1._1 ::: tc._2._2._2._2._1._1 ::: tc._2._2._2._2._2._1._1 ::: tc._2._2._2._2._2._2._1
+    print(errs.map(_.toString).mkString("\n"))
     ast
   }
 }

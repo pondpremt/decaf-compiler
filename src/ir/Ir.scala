@@ -15,6 +15,16 @@ case class CalloutDecl(id: ID)(implicit src: Source) extends Ir
 
 case class FieldDecl(typ: IrType, ids: List[VarDecl])(implicit src: Source) extends Ir
 
+sealed abstract class VarDecl(implicit src: Source) extends Ir
+
+object VarDecl {
+
+  final case class IDDecl(id: ID)(implicit src: Source) extends VarDecl
+
+  final case class IDArrayDecl(id: ID, size: Int)(implicit src: Source) extends VarDecl
+
+}
+
 case class MethodDecl(typ: IrVoidableType, id: ID, params: List[ParamDecl], body: Block)(implicit src: Source) extends Ir
 
 case class ParamDecl(paramType: IrType, paramId: ID)(implicit src: Source) extends Ir
@@ -95,16 +105,6 @@ object MethodArg {
 }
 
 case class ID(name: String)(implicit src: Source) extends Ir
-
-sealed abstract class VarDecl(implicit src: Source) extends Ir
-
-object VarDecl {
-
-  final case class IDDecl(id: ID)(implicit src: Source) extends VarDecl
-
-  final case class IDArrayDecl(id: ID, size: Int)(implicit src: Source) extends VarDecl
-
-}
 
 sealed abstract class Op(implicit src: Source) extends Ir
 

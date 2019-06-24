@@ -1,30 +1,38 @@
 package ir
 
-object STBuilder extends STListener[List[SymbolTable]] {
+object STBuilder extends STListener[(List[SemanticError], List[SymbolTable])] {
 
-  def initState: List[SymbolTable] = Nil
+  // Checked: Constrant 1
+
+  def initState: (List[SemanticError], List[SymbolTable]) = (Nil, Nil)
+
+  def put(node: Ir, name: String, desc: Descriptor, s: S): S = s._1.lookupLocal(name) match {
+    case Some(_) =>
+      (s._1, (SemanticError(node.getSource, "Duplicate declaration of identifier " + name) :: s._2._1, s._2._2))
+    case _ =>
+      (s._1.put(name, desc), s._2)
+  }
+
+  def make(s: S): S = (SymbolTable.make(s._1), s._2)
 
   override def enter(node: Ir, s: S): S = node match {
-    case CalloutDecl(id) => (s._1.put(id.name, Descriptor.Callout), s._2)
+    case CalloutDecl(id) => put(node, id.name, Descriptor.Callout, s)
     case FieldDecl(typ, fields) =>
-      val newSt = fields.foldLeft(s._1) {
-        case (st, VarDecl.IDDecl(id)) => st.put(id.name, Descriptor.Variable(typ.typ))
-        case (st, VarDecl.IDArrayDecl(id, size)) => st.put(id.name, Descriptor.Array(typ.typ, size))
+      fields.foldLeft(s) {
+        case (_s, VarDecl.IDDecl(id)) => put(node, id.name, Descriptor.Variable(typ.typ), _s)
+        case (_s, VarDecl.IDArrayDecl(id, size)) => put(node, id.name, Descriptor.Array(typ.typ, size), _s)
       }
-      (newSt, s._2)
     case MethodDecl(typ, id, params, _) =>
       val typs = params.map(_.paramType.typ)
-      val st = s._1.put(id.name, Descriptor.Method(FunctionType(typs, typ.typ)))
-      (SymbolTable.make(st), s._2)
-    case ParamDecl(typ, id) => (s._1.put(id.name, Descriptor.Variable(typ.typ)), s._2)
-    case Block(_, _) => (SymbolTable.make(s._1), s._2)
+      make(put(node, id.name, Descriptor.Method(FunctionType(typs, typ.typ)), s))
+    case ParamDecl(typ, id) => put(node, id.name, Descriptor.Variable(typ.typ), s)
+    case Block(_, _) => make(s)
     case _ => s
   }
 
   override def leave(node: Ir, s: S): S = node match {
-    case Block(_, _) => (s._1.parent.get, s._1 :: s._2)
-    case MethodDecl(_, _, _, _) => (s._1.parent.get, s._1 :: s._2)
-    case Program(_, _, _) => (s._1, s._1 :: s._2)
+    case Block(_, _) | MethodDecl(_, _, _, _) | Program(_, _, _) =>
+      (s._1.parent.getOrElse(s._1), (s._2._1, s._1 :: s._2._2))
     case _ => s
   }
 }

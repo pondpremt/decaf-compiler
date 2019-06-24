@@ -36,8 +36,7 @@ abstract class SemanticChecker[T] extends STReadListener[(List[SemanticError], T
 
 object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
 
-  // Checked: 5, 8, 9, 11(b), 13, 14, 15, 16, 17, 18, 19, 20, 21
-  // Overlapping: check that arrays aren't used outside of an expression
+  // Checked: 5, 7, 8, 9, 11(b), 13, 14, 15, 16, 17, 18, 19, 20, 21
 
   import util.Util
 
@@ -63,12 +62,13 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
   def getMethodType(t: T): VoidableType = t._2
 
   def isNotSame(t1: Option[Type], t2: Option[Type]): Boolean = (t1, t2) match {
-    case (Some(typ1), Some(typ2)) => !typ1.equals(typ2)
+    case (Some(typ1), Some(typ2)) => typ1.toString != typ2.toString
     case _ => false
   }
 
   def isNot(expected: Type, actual: Option[Type]): Boolean = actual match {
-    case Some(`expected`) | None => false
+    case Some(typ) => expected.toString != typ.toString
+    case None => false
     case _ => true
   }
 
@@ -113,7 +113,7 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
     case Stmt.For(_, start, stop, _, _) =>
       if (isNot(PrimitiveType.IntT, nth(t, 1)))
         Result.Error(SemanticError(start.getSource, "The initial expr of for must have type int; found " + nth(t, 1).get.toString), pop(t, 2))
-      else if (isNot(PrimitiveType.BoolT, nth(t, 0)))
+      else if (isNot(PrimitiveType.IntT, nth(t, 0)))
         Result.Error(SemanticError(stop.getSource, "The ending expr of for must have type int; found " + nth(t, 0).get.toString), pop(t, 2))
       else
         Result.Good(pop(t, 2))
@@ -138,6 +138,7 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
   def leave(node: Location, st: SymbolTable, t: T): Result[T] = node match {
     case Location.Var(id) => Result.Good(push(t, st.lookup(id.name).flatMap({
       case Descriptor.Variable(typ) => Some(typ)
+      case Descriptor.Array(typ, _) => Some(ArrayType(typ))
       case _ => None
     })))
     case Location.Cell(id, e) =>
@@ -157,7 +158,7 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
     case n: Expr.BinaryOp => leave(n, st, t)
     case Expr.Load(_) => Result.Good(t)
     case Expr.Call(call) => Result.Good(push(t, st.lookup(call.method.name).flatMap({
-      case Descriptor.Method(typ) => Some(typ.value)
+      case Descriptor.Method(FunctionType(_, VoidableType.Primitive(typ))) => Some(typ)
       case _ => None
     })))
     case Expr.Length(_) => Result.Good(push(t, Some(PrimitiveType.IntT)))
@@ -228,7 +229,7 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
   // number of stack pushes as there are arguments, so push None for string arguments.
   def leave(node: MethodArg, st: SymbolTable, t: T): Result[T] = node match {
     case MethodArg.ExprArg(_) => Result.Good(t)
-    case MethodArg.StringArg(_) => Result.Good(push(t, None))
+    case MethodArg.StringArg(_) => Result.Good(push(t, Some(StringT)))
   }
 
   def cleanupParams(node: MethodCall, t: T): T = node.args.foldLeft(t)((t: T, arg: MethodArg) => arg match {
@@ -256,4 +257,117 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
 
 }
 
+object IDChecker extends SemanticChecker[Unit] {
 
+  // Checked: 2, 3, 10, 11.a, [12]
+
+  type T = Unit
+
+  def initCheckerState: T = Unit
+
+  def checkDeclared(st: SymbolTable, t: T, id: ID): Result[T] = st.lookup(id.name) match {
+    case Some(_) => Result.Good(t)
+    case _ => Result.Error(SemanticError(id.getSource, "Identifier " + id.name + " is used before it is declared"), t)
+  }
+
+  def enter(node: Ir, st: SymbolTable, t: T): Result[T] = node match {
+    case Location.Var(id) => checkDeclared(st, t, id)
+    case Expr.Length(id) => checkDeclared(st, t, id)
+    case MethodCall(id, _) => checkDeclared(st, t, id)
+    case Stmt.For(id, _, _, _, _) => st.lookup(id.name) match {
+      case Some(Descriptor.Variable(PrimitiveType.IntT)) => Result.Good(t)
+      case _ => Result.Error(SemanticError(id.getSource, "For loop index must have been declared an integer variable"), t)
+    }
+    case Location.Cell(id, _) => st.lookup(id.name) match {
+      case Some(Descriptor.Array(_, _)) => Result.Good(t)
+      case Some(_) => Result.Error(SemanticError(id.getSource, "For all locations of the form id[expr], id must be an array variable"), t)
+      case _ => Result.Error(SemanticError(id.getSource, "Identifier " + id.name + " is used before it is declared"), t)
+    }
+    case _ => Result.Good(t)
+  }
+
+  def leave(node: Ir, st: SymbolTable, t: T): Result[T] = node match {
+    case _: Program => st.lookup("main") match {
+      case Some(Descriptor.Method(FunctionType(Nil, VoidableType.VoidT))) => Result.Good(t)
+      case _ => Result.Error(SemanticError(node.getSource, "The program must contain a definition for void main () that has no parameters"), t)
+    }
+    case _ => Result.Good(t)
+  }
+
+}
+
+object LitIntChecker extends SemanticChecker[Unit] {
+
+  // checked: 4, 22
+
+  type T = Unit
+
+  def initCheckerState: T = Unit
+
+  def enter(node: Ir, st: SymbolTable, t: T): Result[T] = node match {
+    case VarDecl.IDArrayDecl(_, size) =>
+      if (size > 0) Result.Good(t)
+      else Result.Error(SemanticError(node.getSource, "The size in an array declaration must be a positive integer; found " + size), t)
+    case Stmt.For(_, _, _, step, _) =>
+      if (step > 0) Result.Good(t)
+      else Result.Error(SemanticError(node.getSource, "The step size of a for loop must be a positive integer; found " + step), t)
+    case _ => Result.Good(t)
+  }
+
+  def leave(node: Ir, st: SymbolTable, t: T): Result[T] = Result.Good(t)
+
+}
+
+object BreakContChecker extends SemanticChecker[List[Boolean]] {
+
+  //Checked: 23
+
+  type T = List[Boolean]
+
+  def initCheckerState: T = List(false)
+
+  def enter(node: Ir, st: SymbolTable, t: T): Result[T] = node match {
+    case _: Stmt.For | _: Stmt.While => Result.Good(true :: t)
+    case Stmt.Break() | Stmt.Continue() =>
+      if (t.head) Result.Good(t)
+      else Result.Error(SemanticError(node.getSource, "All break and continue statements must be contained within the body of a for or a while"), t)
+    case _ => Result.Good(t)
+  }
+
+  def leave(node: Ir, st: SymbolTable, t: T): Result[T] = node match {
+    case _: Stmt.For | _: Stmt.While => Result.Good(t.tail)
+    case _ => Result.Good(t)
+  }
+
+}
+
+object MustReturnChecker extends SemanticChecker[List[Boolean]] {
+
+  // Checked: 6
+
+  // Each statement pushes true if it definitely returns and false otherwise.
+  // Each block pushes true if it definitely returns and false otherwise.
+  type T = List[Boolean]
+
+  def initCheckerState: T = Nil
+
+  def enter(node: Ir, st: SymbolTable, t: T): Result[T] = Result.Good(t)
+
+  def leave(node: Ir, st: SymbolTable, t: T): Result[T] = node match {
+    case Stmt.Return(_) => Result.Good(true :: t)
+    case Stmt.Cond(_, _, None) => Result.Good(false :: t.tail)
+    case Stmt.Cond(_, _, Some(_)) => Result.Good((t.head && t(1)) :: t.drop(2))
+    case Stmt.For(_, _, _, _, _) => Result.Good(false :: t.tail)
+    case Stmt.While(_, _) => Result.Good(false :: t.tail)
+    case _: Stmt => Result.Good(false :: t)
+    case Block(_, stmts) => Result.Good(t.take(stmts.length).foldLeft(false)(_ || _) :: t.drop(stmts.length))
+    case MethodDecl(IrVoidableType(typ), _, _, _) => typ match {
+      case VoidableType.VoidT => Result.Good(t.tail)
+      case _ =>
+        if (t.head) Result.Good(t.tail)
+        else Result.Error(SemanticError(node.getSource, "All non-void methods must return a result"), t.tail)
+    }
+    case _ => Result.Good(t)
+  }
+
+}
