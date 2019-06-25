@@ -122,6 +122,6 @@ object Compiler {
     val tc = ir.Walk(checker).walkIr(ast)
     val errs = tc._2._1._1 ::: tc._2._2._1._1 ::: tc._2._2._2._1._1 ::: tc._2._2._2._2._1._1 ::: tc._2._2._2._2._2._1._1 ::: tc._2._2._2._2._2._2._1
     print(errs.map(_.toString).mkString("\n"))
-    ast
+    if (errs.nonEmpty) null else ast
   }
 }

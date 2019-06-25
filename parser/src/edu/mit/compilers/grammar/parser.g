@@ -119,7 +119,8 @@ expr_eq      : expr_rel    ((EQQ^ | NEQ^)             expr_rel)*;
 expr_rel     : expr_arith1 ((LT^ | GT^ | LTE^ | GTE^) expr_arith1)*;
 expr_arith1  : expr_arith2 ((PLUS^ | MINUS^)          expr_arith2)*;
 expr_arith2  : expr_unop   ((TIMES^ | DIV^ | MOD^)    expr_unop)*;
-expr_unop    : (BANG^ | MINUS^)* expr_atom;
+expr_unop    : (BANG^ | MINUS^) expr_unop
+             | expr_atom;
 expr_atom    : LPAREN! expr RPAREN!
              | location
              | method_call

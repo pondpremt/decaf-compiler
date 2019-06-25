@@ -33,7 +33,7 @@ object TreeParser {
     val id = parseId(node.getChild(0))
     node.getNumberOfChildren match {
       case 1 => ir.VarDecl.IDDecl(id)
-      case 2 => ir.VarDecl.IDArrayDecl(id, node.getChild(1).getText.toInt)
+      case 2 => ir.VarDecl.IDArrayDecl(id, parseNumber(node.getChild(1)))
     }
   }
 
@@ -95,12 +95,15 @@ object TreeParser {
     case DecafParserTokenTypes.AT => ir.Expr.Length(parseId(node.getChild(0)))
     case DecafParserTokenTypes.LOCATION => ir.Expr.Load(parseLocation)
     case DecafParserTokenTypes.METHOD_CALL =>ir.Expr.Call(parseMethodCall)
-    case DecafParserTokenTypes.INT_LITERAL => ir.Expr.LitInt(node.getText.toInt)
+    case DecafParserTokenTypes.INT_LITERAL => ir.Expr.LitInt(parseNumber(node))
     case DecafParserTokenTypes.CHAR_LITERAL => ir.Expr.LitChar(node.getText.charAt(0))
     case DecafParserTokenTypes.TK_true => ir.Expr.LitBool(value=true)
     case DecafParserTokenTypes.TK_false => ir.Expr.LitBool(value=false)
     case _ => node.getNumberOfChildren match {
-      case 1 => ir.Expr.UnaryOp(parseOp, parseExpr(node.getChild(0)))
+      case 1 => (parseOp, parseExpr(node.getChild(0))) match {
+        case (ir.Op.Minus(), ir.Expr.LitInt(value)) => ir.Expr.LitInt(-value)
+        case (op, expr) => ir.Expr.UnaryOp(op, expr)
+      }
       case 2 => ir.Expr.BinaryOp(parseOp, parseExpr(node.getChild(0)), parseExpr(node.getChild(1)))
     }
   }
@@ -146,8 +149,8 @@ object TreeParser {
     val start = parseExpr(node.getChild(1))
     val stop = parseExpr(node.getChild(2))
     val (step, body) = node.getNumberOfChildren match {
-      case 4 => (1, parseBlock(node.getChild(3)))
-      case 5 => (node.getChild(3).getText.toInt, parseBlock(node.getChild(4)))
+      case 4 => (BigInt(1), parseBlock(node.getChild(3)))
+      case 5 => (parseNumber(node.getChild(3)), parseBlock(node.getChild(4)))
     }
     ir.Stmt.For(index, start, stop, step, body)
   }
@@ -158,5 +161,14 @@ object TreeParser {
   def parseReturn(implicit node: ParseTree): ir.Stmt.Return = node.getNumberOfChildren match {
     case 0 => ir.Stmt.Return(Option.empty)
     case 1 => ir.Stmt.Return(Option.apply(parseExpr(node.getChild(0))))
+  }
+
+  def parseNumber(node: ParseTree): BigInt = {
+    def parseDigit(c: Char): Long =
+      if (c.isDigit) c - '0'
+      else c.toUpper - 'A' + 10
+
+    if (node.getText.startsWith("0x")) node.getText.drop(2).foldLeft(BigInt(0))(_ * 16L + parseDigit(_))
+    else BigInt(node.getText)
   }
 }

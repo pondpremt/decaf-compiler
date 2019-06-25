@@ -21,7 +21,7 @@ object VarDecl {
 
   final case class IDDecl(id: ID)(implicit src: Source) extends VarDecl
 
-  final case class IDArrayDecl(id: ID, size: Int)(implicit src: Source) extends VarDecl
+  final case class IDArrayDecl(id: ID, size: BigInt)(implicit src: Source) extends VarDecl
 
 }
 
@@ -45,7 +45,7 @@ object Stmt {
 
   final case class Cond(p: Expr, t: Block, f: Option[Block])(implicit src: Source) extends Stmt
 
-  final case class For(index: ID, start: Expr, stop: Expr, step: Int, body: Block)(implicit src: Source)
+  final case class For(index: ID, start: Expr, stop: Expr, step: BigInt, body: Block)(implicit src: Source)
     extends Stmt
 
   final case class While(cond: Expr, body: Block)(implicit src: Source) extends Stmt
@@ -84,7 +84,7 @@ object Expr {
 
   final case class Length(id: ID)(implicit src: Source) extends Expr
 
-  final case class LitInt(value: Int)(implicit src: Source) extends Expr
+  final case class LitInt(value: BigInt)(implicit src: Source) extends Expr
 
   final case class LitBool(value: Boolean)(implicit src: Source) extends Expr
 

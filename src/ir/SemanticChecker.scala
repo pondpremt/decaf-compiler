@@ -139,7 +139,8 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
     case Location.Var(id) => Result.Good(push(t, st.lookup(id.name).flatMap({
       case Descriptor.Variable(typ) => Some(typ)
       case Descriptor.Array(typ, _) => Some(ArrayType(typ))
-      case _ => None
+      case Descriptor.Callout => Some(CalloutT)
+      case Descriptor.Method(typ) => Some(typ)
     })))
     case Location.Cell(id, e) =>
       val exprType = st.lookup(id.name).flatMap({
@@ -158,10 +159,13 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
     case n: Expr.BinaryOp => leave(n, st, t)
     case Expr.Load(_) => Result.Good(t)
     case Expr.Call(call) => Result.Good(push(t, st.lookup(call.method.name).flatMap({
-      case Descriptor.Method(FunctionType(_, VoidableType.Primitive(typ))) => Some(typ)
+      case Descriptor.Method(FunctionType(_, typ)) => Some(typ)
       case _ => None
     })))
-    case Expr.Length(_) => Result.Good(push(t, Some(PrimitiveType.IntT)))
+    case Expr.Length(id) => st.lookup(id.name) match {
+      case Some(Descriptor.Array(_, _)) | None => Result.Good(push(t, Some(PrimitiveType.IntT)))
+      case _ => Result.Error(SemanticError(id.getSource, "The argument of the @ operator must be an array variable"), push(t, Some(PrimitiveType.IntT)))
+    }
     case Expr.LitInt(_) => Result.Good(push(t, Some(PrimitiveType.IntT)))
     case Expr.LitBool(_) => Result.Good(push(t, Some(PrimitiveType.BoolT)))
     case Expr.LitChar(_) => Result.Good(push(t, Some(PrimitiveType.CharT)))
@@ -212,16 +216,12 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
   }
 
   def leave(node: Expr.UnaryOp, st: SymbolTable, t: T): Result[T] = node.op match {
-    case Op.Minus() => nth(t, 0) match {
-      case Some(PrimitiveType.IntT) => Result.Good(t)
-      case Some(typ) => Result.Error(SemanticError(node.arg.getSource, "UnaryOp " + Util.irToString(node.op) + " expects expression of type int but found " + typ.toString), replace(t, 1, Some(PrimitiveType.IntT)))
-      case None => Result.Good(replace(t, 1, Some(PrimitiveType.IntT)))
-    }
-    case Op.Bang() => nth(t, 0) match {
-      case Some(PrimitiveType.BoolT) => Result.Good(t)
-      case Some(typ) => Result.Error(SemanticError(node.arg.getSource, "UnaryOp " + Util.irToString(node.op) + " expects expression of type bool but found " + typ.toString), replace(t, 1, Some(PrimitiveType.BoolT)))
-      case None => Result.Good(replace(t, 1, Some(PrimitiveType.BoolT)))
-    }
+    case Op.Minus() =>
+      if (isNot(PrimitiveType.IntT, nth(t, 0))) Result.Error(SemanticError(node.arg.getSource, "UnaryOp " + Util.irToString(node.op) + " expects expression of type int but found " + nth(t, 0).get.toString), replace(t, 1, Some(PrimitiveType.IntT)))
+      else Result.Good(replace(t, 1, Some(PrimitiveType.IntT)))
+    case Op.Bang() =>
+      if (isNot(PrimitiveType.BoolT, nth(t, 0))) Result.Error(SemanticError(node.arg.getSource, "UnaryOp " + Util.irToString(node.op) + " expects expression of type bool but found " + nth(t, 0).get.toString), replace(t, 1, Some(PrimitiveType.BoolT)))
+      else Result.Good(replace(t, 1, Some(PrimitiveType.BoolT)))
     case _ => throw new RuntimeException()
   }
 
@@ -304,13 +304,19 @@ object LitIntChecker extends SemanticChecker[Unit] {
 
   def initCheckerState: T = Unit
 
+  def checkBound(node: Ir, value: BigInt, t: T): Result[T] =
+    if (value < -BigInt("9223372036854775808")) Result.Error(SemanticError(node.getSource, "The integer is too small: " + value.toString()), t)
+    else if (value > BigInt("9223372036854775807")) Result.Error(SemanticError(node.getSource, "The integer is too large: " + value.toString()), t)
+    else Result.Good(t)
+
   def enter(node: Ir, st: SymbolTable, t: T): Result[T] = node match {
     case VarDecl.IDArrayDecl(_, size) =>
-      if (size > 0) Result.Good(t)
-      else Result.Error(SemanticError(node.getSource, "The size in an array declaration must be a positive integer; found " + size), t)
+      if (size <= 0) Result.Error(SemanticError(node.getSource, "The size in an array declaration must be a positive integer; found " + size), t)
+      else checkBound(node, size, t)
     case Stmt.For(_, _, _, step, _) =>
-      if (step > 0) Result.Good(t)
-      else Result.Error(SemanticError(node.getSource, "The step size of a for loop must be a positive integer; found " + step), t)
+      if (step <= 0) Result.Error(SemanticError(node.getSource, "The step size of a for loop must be a positive integer; found " + step), t)
+      else checkBound(node, step, t)
+    case Expr.LitInt(value) => checkBound(node, value, t)
     case _ => Result.Good(t)
   }
 

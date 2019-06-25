@@ -47,5 +47,9 @@ case object StringT extends Type {
 }
 
 final case class FunctionType(params: List[PrimitiveType], value: VoidableType) extends Type {
-  override def toString: String = "(" + params.map(_.toString).mkString(", ") + ") => " + value.toString
+  override def toString: String = "function: (" + params.map(_.toString).mkString(", ") + ") => " + value.toString
+}
+
+case object CalloutT extends Type {
+  override def toString: String = "callout"
 }
