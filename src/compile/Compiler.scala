@@ -2,9 +2,10 @@ package compile
 import java.io._
 
 import antlr.ASTFactory
-import ir._
 import parsing.{ParseTree, TreeParser}
-import util.CLI
+import semanticchecking._
+import symboltable.{STBuilder, STListenerPair}
+import util.{CLI, PrettyPrintListener}
 
 import scala.Console
 
@@ -115,10 +116,10 @@ object Compiler {
     }
 
     val checker = STListenerPair(STBuilder,
-      STListenerPair(MustReturnChecker,
-        STListenerPair(BreakContChecker,
-          STListenerPair(LitIntChecker,
-            STListenerPair(IDChecker, TypeChecker)))))
+      symboltable.STListenerPair(MustReturnChecker,
+        symboltable.STListenerPair(BreakContChecker,
+          symboltable.STListenerPair(LitIntChecker,
+            symboltable.STListenerPair(IDChecker, TypeChecker)))))
     val tc = ir.Walk(checker).walkIr(ast)
     val errs = tc._2._1._1 ::: tc._2._2._1._1 ::: tc._2._2._2._1._1 ::: tc._2._2._2._2._1._1 ::: tc._2._2._2._2._2._1._1 ::: tc._2._2._2._2._2._2._1
     print(errs.map(_.toString).mkString("\n"))

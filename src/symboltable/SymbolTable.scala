@@ -1,4 +1,6 @@
-package ir
+package symboltable
+
+import ir.{FunctionType, PrimitiveType}
 
 final case class SymbolTable(parent: Option[SymbolTable], scope: STScope, tab: Map[String, Descriptor]) {
 

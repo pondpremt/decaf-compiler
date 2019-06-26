@@ -2,6 +2,27 @@ package ir
 
 final case class Walk[S](l: Listener[S]) {
 
+  // Main entry point/dispatcher
+  def walkIr: Ir => S = {
+    case n: Program => walk(n)(l.init)
+    case n: CalloutDecl => walk(n)(l.init)
+    case n: FieldDecl => walk(n)(l.init)
+    case n: MethodDecl => walk(n)(l.init)
+    case n: ID => walk(n)(l.init)
+    case n: IrType => walk(n)(l.init)
+    case n: IrVoidableType => walk(n)(l.init)
+    case n: VarDecl => walk(n)(l.init)
+    case n: ParamDecl => walk(n)(l.init)
+    case n: Block => walk(n)(l.init)
+    case n: Stmt => walk(n)(l.init)
+    case n: Location => walk(n)(l.init)
+    case n: Expr => walk(n)(l.init)
+    case n: MethodCall => walk(n)(l.init)
+    case n: MethodArg => walk(n)(l.init)
+    case n: Op => walk(n)(l.init)
+  }
+
+
   implicit def walk(node: Program): S => S =
     wrap(node)(walkList(node.callouts) andThen walkList(node.fields) andThen walkList(node.methods))
 
@@ -72,25 +93,6 @@ final case class Walk[S](l: Listener[S]) {
   def walkOption[A](ls: Option[A])(implicit walk: A => S => S): S => S = ls match {
     case None => identity[S]
     case Some(a) => walk(a)
-  }
-
-  def walkIr: Ir => S = {
-    case n: Program => walk(n)(l.init)
-    case n: CalloutDecl => walk(n)(l.init)
-    case n: FieldDecl => walk(n)(l.init)
-    case n: MethodDecl => walk(n)(l.init)
-    case n: ID => walk(n)(l.init)
-    case n: IrType => walk(n)(l.init)
-    case n: IrVoidableType => walk(n)(l.init)
-    case n: VarDecl => walk(n)(l.init)
-    case n: ParamDecl => walk(n)(l.init)
-    case n: Block => walk(n)(l.init)
-    case n: Stmt => walk(n)(l.init)
-    case n: Location => walk(n)(l.init)
-    case n: Expr => walk(n)(l.init)
-    case n: MethodCall => walk(n)(l.init)
-    case n: MethodArg => walk(n)(l.init)
-    case n: Op => walk(n)(l.init)
   }
 
   private def wrap[A <: Ir](node: A)(f: S => S): S => S = s => l.leave(node, f(l.enter(node, s)))

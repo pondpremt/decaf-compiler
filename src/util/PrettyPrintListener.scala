@@ -1,4 +1,6 @@
-package ir
+package util
+
+import ir._
 
 object PrettyPrintListener extends Listener[(String, List[String])] {
 

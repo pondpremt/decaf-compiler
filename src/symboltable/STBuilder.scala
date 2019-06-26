@@ -1,4 +1,7 @@
-package ir
+package symboltable
+
+import ir._
+import semanticchecking.SemanticError
 
 object STBuilder extends STListener[(List[SemanticError], List[SymbolTable])] {
 
