@@ -1,7 +1,5 @@
 package symboltable
 
-import ir.{FunctionType, PrimitiveType}
-
 final case class SymbolTable(parent: Option[SymbolTable], scope: STScope, tab: Map[String, Descriptor]) {
 
   def put(s: String, d: Descriptor): SymbolTable = this.copy(tab = tab + ((s, d)))
@@ -34,19 +32,3 @@ object STScope {
   final case object Block extends STScope
 
 }
-
-sealed abstract class Descriptor
-
-object Descriptor {
-
-  final case class Variable(typ: PrimitiveType) extends Descriptor
-
-  final case class Array(typ: PrimitiveType, size: Long) extends Descriptor
-
-  final case class Method(typ: FunctionType) extends Descriptor
-
-  final case object Callout extends Descriptor
-
-}
-
-

@@ -121,7 +121,12 @@ object Compiler {
           symboltable.STListenerPair(LitIntChecker,
             symboltable.STListenerPair(IDChecker, TypeChecker)))))
     val tc = ir.Walk(checker).walkIr(ast)
-    val errs = tc._2._1._1 ::: tc._2._2._1._1 ::: tc._2._2._2._1._1 ::: tc._2._2._2._2._1._1 ::: tc._2._2._2._2._2._1._1 ::: tc._2._2._2._2._2._2._1
+    val errs = tc._2._1.errs :::
+      tc._2._2._1._1 :::
+      tc._2._2._2._1._1 :::
+      tc._2._2._2._2._1._1 :::
+      tc._2._2._2._2._2._1._1 :::
+      tc._2._2._2._2._2._2._1
     print(errs.map(_.toString).mkString("\n"))
     if (errs.nonEmpty) null else ast
   }

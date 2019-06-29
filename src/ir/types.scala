@@ -1,5 +1,7 @@
 package ir
 
+// TODO write implicit type conversion functions to avoid using toString for comparison
+
 sealed abstract class Type {
   // Must be precise enough to be used for type comparison; i.e., two t1.toString == t2.toString iff t1 and t2 represent
   // the same program type

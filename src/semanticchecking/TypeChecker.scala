@@ -106,14 +106,14 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
 
   def leave(node: Location, st: SymbolTable, t: T): Result[T] = node match {
     case Location.Var(id) => Result.Good(push(t, st.lookup(id.name).flatMap({
-      case Descriptor.Variable(typ) => Some(typ)
-      case Descriptor.Array(typ, _) => Some(ArrayType(typ))
-      case Descriptor.Callout => Some(CalloutT)
-      case Descriptor.Method(typ) => Some(typ)
+      case Descriptor.Variable(_, typ) => Some(typ)
+      case Descriptor.Array(_, typ, _) => Some(ArrayType(typ))
+      case Descriptor.Callout(_) => Some(CalloutT)
+      case Descriptor.Method(_, typ) => Some(typ)
     })))
     case Location.Cell(id, e) =>
       val exprType = st.lookup(id.name).flatMap({
-        case Descriptor.Array(typ, _) => Some(typ)
+        case Descriptor.Array(_, typ, _) => Some(typ)
         case _ => None
       })
       if (isNot(PrimitiveType.IntT, nth(t, 0)))
@@ -128,11 +128,11 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
     case n: Expr.BinaryOp => leave(n, st, t)
     case Expr.Load(_) => Result.Good(t)
     case Expr.Call(call) => Result.Good(push(t, st.lookup(call.method.name).flatMap({
-      case Descriptor.Method(FunctionType(_, typ)) => Some(typ)
+      case Descriptor.Method(_, FunctionType(_, typ)) => Some(typ)
       case _ => None
     })))
     case Expr.Length(id) => st.lookup(id.name) match {
-      case Some(Descriptor.Array(_, _)) | None => Result.Good(push(t, Some(PrimitiveType.IntT)))
+      case Some(Descriptor.Array(_, _, _)) | None => Result.Good(push(t, Some(PrimitiveType.IntT)))
       case _ => Result.Error(SemanticError(id.getSource, "The argument of the @ operator must be an array variable"), push(t, Some(PrimitiveType.IntT)))
     }
     case Expr.LitInt(_) => Result.Good(push(t, Some(PrimitiveType.IntT)))
@@ -215,8 +215,8 @@ object TypeChecker extends SemanticChecker[(List[Option[Type]], VoidableType)] {
       checkParams(node, paramTyps, i + 1, t)
 
   def leave(node: MethodCall, st: SymbolTable, t: T): Result[T] = st.lookup(node.method.name) match {
-    case None | Some(Descriptor.Callout) => Result.Good(cleanupParams(node, t))
-    case Some(Descriptor.Method(FunctionType(paramTyps, _))) =>
+    case None | Some(Descriptor.Callout(_)) => Result.Good(cleanupParams(node, t))
+    case Some(Descriptor.Method(_, FunctionType(paramTyps, _))) =>
       if (paramTyps.length != node.args.length)
         Result.Error(SemanticError(node.getSource, "The number of arguments in a method call (" + node.args.length + ") must be the same as the number of the formals (" + paramTyps.length + ")"), cleanupParams(node, t))
       else
