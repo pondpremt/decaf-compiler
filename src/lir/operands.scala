@@ -78,5 +78,7 @@ object Conversion {
 
   implicit def stringToSource: String => Source = stringToLocation andThen locationToSource
 
+  implicit def stringToTarget: String => Target = Target.Label
+
 
 }
