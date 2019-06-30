@@ -37,7 +37,7 @@ object State {
 
   def get[S]: State[S, S] = State(s => (s, s))
 
-  def put[S](s: S): State[S, S] = State(_ => (s, s))
+  def put[S](s: S): State[S, Unit] = State(_ => ((), s))
 
   def pure[S, A](a: A): State[S, A] = State(s => (a, s))
 
