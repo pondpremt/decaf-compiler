@@ -1,217 +1,278 @@
 package codegen
 
 import codegen.State._
-import ir._
 import lir.Conversion._
+import lir._
 import lir.Registers._
-import symboltable.{Descriptor, STReadListener, SymbolTable}
+import symboltable.{Descriptor, SymbolTable}
 import util.State.{get, put, pure}
 
-object LirGenerator /* extends STReadListener[Builder] */ {
+object LirGenerator {
 
   // We could have used (and have tried using) the listener model. However, it is less efficient and not that much
   // more concise than manual recursion
 
-  def initState: Builder = Builder(Nil, Nil, lir.Program(Nil, Nil, Nil), 0, isGlobal = true)
+  type SymbolCtx = Map[ir.Ir, SymbolTable]
 
-  def idToName(id: ID, st: SymbolTable): String = st.lookup(id.name) match {
-    case Some(Descriptor.Array(uid, _, _)) => "ARR_" + id.name + "_" + uid
-    case Some(Descriptor.Variable(uid, _)) => "VAR_" + id.name + "_" + uid
-    case Some(Descriptor.Method(uid, _)) => if (id.name == "main") id.name else "METHOD_" + id.name + "_" + uid
-    case Some(Descriptor.Callout(_)) => id.name
+  def idToName(node: ir.Ir, id: ir.ID, st: SymbolCtx): String = st(node).lookup(id.name).get match {
+    case Descriptor.Array(uid, _, _) => "ARR_" + id.name + "_" + uid
+    case Descriptor.Variable(uid, _) => "VAR_" + id.name + "_" + uid
+    case Descriptor.Method(uid, _) => if (id.name == "main") id.name else "METHOD_" + id.name + "_" + uid
+    case Descriptor.Callout(_) => id.name
+  }
+
+  def arraySize(node: ir.Ir, id: ir.ID, st: SymbolCtx): Long = st(node).lookup(id.name).get match {
+    case Descriptor.Array(_, _, size) => size
     case _ => throw new RuntimeException
   }
 
-  implicit def gen(node: Program, st: SymbolTable): BState[Unit] = {
-    genList(node.fields, st)
+  def strName(name: String): String = ".STR_" + name
+
+  def throwOutOfBound = Method("THROW_OutOfBound", Nil, List(
+    Copy.Mov(strName("SYS_OutOfBound"), rdi),
+    Copy.Mov(0L, rax),
+    Control.Call("printf"),
+    Copy.Mov(60L, rax),
+    Copy.Mov(-1L, rdi),
+    Control.Syscall()
+  ))
+
+  def throwFalloff = Method("THROW_Falloff", Nil, List(
+    Copy.Mov(strName("SYS_Falloff"), rdi),
+    Copy.Mov(0L, rax),
+    Control.Call("printf"),
+    Copy.Mov(60L, rax),
+    Copy.Mov(-2L, rdi),
+    Control.Syscall()
+  ))
+
+  def sysStrings = List(
+    Str(strName("SYS_OutOfBound"), "Array index out of bound"),
+    Str(strName("SYS_Falloff"), "Method did not return"))
+
+  def sysMethods = List(throwOutOfBound, throwFalloff)
+
+  def initState: Builder = Builder(Nil, Nil, Program(Nil, sysStrings, sysMethods), 0, isGlobal = true)
+
+  // def genLir(node: ir.Program, st: Map[ir.Ir, SymbolTable]:
+
+  implicit def gen(node: ir.Program, st: SymbolCtx): BState[Unit] =
+    genList(node.fields, st) >> genList(node.methods, st) >> pure()
+
+  implicit def gen(node: ir.FieldDecl, st: SymbolCtx): BState[Unit] =
+    genList(node.ids, st) >> pure()
+
+  implicit def gen(node: ir.VarDecl, st: SymbolCtx): BState[Unit] = node match {
+    case ir.VarDecl.IDDecl(id) => declVar(idToName(node, id, st))
+    case ir.VarDecl.IDArrayDecl(id, size) => declArr(idToName(node, id, st), size.toLong)
   }
 
-  implicit def gen(node: FieldDecl, st: SymbolTable): BState[Unit] = pure()
+  implicit def gen(node: ir.MethodDecl, st: SymbolCtx): BState[Unit] = for {
+    _ <- toggleIsGlobal
+    _ <- genList(node.params, st)
+    _ <- gen(node.body, st)
+    _ <- node.typ.typ match {
+      case ir.VoidableType.VoidT => append(Stack.Leave) >> append(Control.Ret)
+      case _ => append(Control.Jmp(throwFalloff.name))
+    }
+    s <- get
+    method = Method(idToName(node, node.id, st), s.decls, s.code)
+    _ <- put(s.copy(code = Nil, decls = Nil, program = s.program.copy(methods = method :: s.program.methods)))
+  } yield ()
 
-  def genList[A](nodes: List[A], st: SymbolTable)(implicit gen: (A, SymbolTable) => BState[Unit]): BState[Unit] =
-    get >>= (s => put(nodes.foldLeft(s)((s2, n) => gen(n, st)(s2)._2)))
+  implicit def gen(node: ir.ParamDecl, st: SymbolCtx): BState[Unit] = declVar(idToName(node, node.paramId, st))
 
-  def enter(node: Ir, st: SymbolTable, s: Builder): Builder = enter(node, st)(s)._2
+  implicit def gen(node: ir.Block, st: SymbolCtx): BState[Unit] =
+    genList(node.fields, st) >> genList(node.stmts, st) >> pure()
 
-  def enter(node: Ir, st: SymbolTable): BState[Unit] = node match {
-    case _: MethodDecl => toggleIsGlobal
-    case _: Block => push(Fragment(Nil, "<block>")) // return name of a block is never used
-    case _ => pure()
-  }
+  implicit def gen(node: ir.Stmt, st: SymbolCtx): BState[Unit] = pure()
 
-  def leave(node: Ir, st: SymbolTable, s: Builder): Builder = leave(node, st)(s)._2
-
-  def leave(node: Ir, st: SymbolTable): BState[Unit] = node match {
-    case n: VarDecl => leave(n, st)
-    case n: ParamDecl => leave(n, st)
-    case n: MethodDecl => leave(n, st)
-    case n: Expr => leave(n, st)
-    case n: Stmt => leave(n, st)
-    case n: Location => leave(n, st)
-    case _ => pure()
-  }
-
-  def leave(node: VarDecl, st: SymbolTable): BState[Unit] = node match {
-    case VarDecl.IDDecl(id) => declVar(idToName(id, st))
-    case VarDecl.IDArrayDecl(id, size) => declArr(idToName(id, st), size.toLong)
-  }
-
-  def leave(node: ParamDecl, st: SymbolTable): BState[Unit] = declVar(node.paramId.name)
+  def genList[A, B](nodes: List[A], st: SymbolCtx)(implicit gen: (A, SymbolCtx) => BState[B]): BState[List[B]] =
+    nodes match {
+      case n :: ns => for {
+        t <- gen(n, st)
+        ts <- genList(ns, st)
+      } yield t :: ts
+      case _ => pure(Nil)
+    }
 
   /** Generate code for expression. Each expression 'returns' a simple name */
-  def leave(node: Expr, st: SymbolTable): BState[Unit] = node match {
-    case n: Expr.UnaryOp => leave(n, st)
-    case n: Expr.BinaryOp => leave(n, st)
-    case _: Expr.Ternary => for {
-      ((f: Fragment, t: Fragment), p: Fragment) <- pop & pop & top
+  def gen(node: ir.Expr, st: SymbolCtx): BState[Location.Name] = node match {
+    case n: ir.Expr.UnaryOp => gen(n, st)
+    case n: ir.Expr.BinaryOp => gen(n, st)
+    case n: ir.Expr.Ternary => for {
+      p <- gen(n.p, st)
+      t <- gen(n.t, st)
+      f <- gen(n.f, st)
       tmp <- nextTmp
-      _ <- extend(t.code)
-      _ <- extend(f.code)
-      _ <- append(lir.Arith.Cmp(1L, p.ret)) // check if p = 1
-      _ <- append(lir.Copy.Mov(t.ret, r10))
-      _ <- append(lir.Copy.Mov(f.ret, r11))
-      _ <- append(lir.Copy.Cmove(r10, r11))
-      _ <- append(lir.Copy.Mov(r11, tmp), tmp)
-    } yield ()
-    case _: Expr.Load => nextTmp & top >>= (x =>
-      append(lir.Copy.Mov(x._2.ret, x._1), x._1))
-    case _: Expr.Call => nextTmp >>= (t =>
-      append(lir.Copy.Mov(rax, t), t))
-    case Expr.Length(id) => nextTmp >>= (t => {
-      val len = st.lookup(id.name).get match {
-        // TODO check array size
-        case Descriptor.Array(_, _, size) => size
-        case _ => throw new RuntimeException
-      }
-      push(Fragment(List(lir.Copy.Mov(len, t)), t))
-    })
-    case Expr.LitInt(value) => nextTmp >>= (t =>
-      push(Fragment(List(lir.Copy.Mov(value.toLong, t)), t)))
-    case Expr.LitBool(value) => nextTmp >>= (t =>
-      push(Fragment(List(lir.Copy.Mov(if (value) 1L else 0L, t)), t)))
-    case Expr.LitChar(value) => nextTmp >>= (t =>
-      push(Fragment(List(lir.Copy.Mov(value.toLong, t)), t)))
+      _ <- append(Arith.Cmp(1L, p)) // check if p = 1
+      _ <- append(Copy.Mov(t, r10))
+      _ <- append(Copy.Mov(f, r11))
+      _ <- append(Copy.Cmove(r10, r11))
+      _ <- append(Copy.Mov(r11, tmp))
+    } yield tmp
+    case ir.Expr.Load(loc) => for {
+      l <- gen(loc, st)
+      t <- nextTmp
+      _ <- append(Copy.Mov(l, t))
+    } yield t
+    case ir.Expr.Call(call) => for {
+      _ <- gen(call, st)
+      t <- nextTmp
+      _ <- append(Copy.Mov(rax, t))
+    } yield t
+    case ir.Expr.Length(id) => for {
+      t <- nextTmp
+      len = arraySize(node, id, st)
+      _ <- append(Copy.Mov(len, t))
+    } yield t
+    case ir.Expr.LitInt(value) => nextTmp >>= (t => append(Copy.Mov(value.toLong, t)) >> pure(t))
+    case ir.Expr.LitBool(value) => nextTmp >>= (t => append(Copy.Mov(if (value) 1L else 0L, t)) >> pure(t))
+    case ir.Expr.LitChar(value) => nextTmp >>= (t => append(Copy.Mov(value.toLong, t)) >> pure(t))
   }
 
-  def leave(node: Expr.UnaryOp, st: SymbolTable): BState[Unit] = for {
-    v <- top
+  def gen(node: ir.Expr.UnaryOp, st: SymbolCtx): BState[Location.Name] = for {
+    v <- gen(node.arg, st)
     t <- nextTmp
-    _ <- append(lir.Copy.Mov(v.ret, r10))
+    _ <- append(Copy.Mov(v, r10))
     r11val = node.op match {
-      case Op.Bang() => 1L
-      case Op.Minus() => 0L
+      case ir.Op.Bang() => 1L
+      case ir.Op.Minus() => 0L
       case _ => throw new RuntimeException
     }
-    _ <- append(lir.Copy.Mov(r11val, r11))
-    _ <- append(lir.Arith.Sub(r10, r11))
-    _ <- append(lir.Copy.Mov(r11, t), t)
-  } yield ()
+    _ <- append(Copy.Mov(r11val, r11))
+    _ <- append(Arith.Sub(r10, r11))
+    _ <- append(Copy.Mov(r11, t))
+  } yield t
 
-  def leave(node: Expr.BinaryOp, st: SymbolTable): BState[Unit] =
-    (pop & top) >>| (_.swap) >>= (args => node.op match {
-      case Op.And() => leaveAndOr(args._1, args._2, isAnd = true)
-      case Op.Or() => leaveAndOr(args._1, args._2, isAnd = false)
-      case Op.Eqq() | Op.Neq() | Op.Lt() | Op.Gt() | Op.Lte() | Op.Gte() => leaveCmp(args._1, args._2, node.op)
-      case Op.Plus() | Op.Minus() | Op.Times() => leavePlusMinusTimes(args._1, args._2, node.op)
-      case Op.Div() | Op.Mod() => leaveDiv(args._1, args._2, node.op)
-      case _ => throw new RuntimeException
-    })
+  def gen(node: ir.Expr.BinaryOp, st: SymbolCtx): BState[Location.Name] = node.op match {
+    case ir.Op.And() => genAndOr(node, st, isAnd = true)
+    case ir.Op.Or() => genAndOr(node, st, isAnd = false)
+    case ir.Op.Eqq() | ir.Op.Neq() | ir.Op.Lt() | ir.Op.Gt() | ir.Op.Lte() | ir.Op.Gte() => genCmp(node, st)
+    case ir.Op.Plus() | ir.Op.Minus() | ir.Op.Times() => genPlusMinusTimes(node, st)
+    case ir.Op.Div() | ir.Op.Mod() => genDiv(node, st)
+    case _ => throw new RuntimeException
+  }
 
-  /** Generate code for and/or binary operation. Assumes that arg1 code is already on the stack */
-  def leaveAndOr(arg1: Fragment, arg2: Fragment, isAnd: Boolean): BState[Unit] = for {
+  def genAndOr(node: ir.Expr.BinaryOp, st: SymbolCtx, isAnd: Boolean): BState[Location.Name] = for {
     lEnd <- nextCount >>| ((if (isAnd) "AND_" else "OR_") + _ + "_end")
+    arg1 <- gen(node.arg1, st)
+    _ <- append(Copy.Mov(arg1, r10))
+    _ <- append(Arith.Cmp(if (isAnd) 0L else 1L, r10))
+    _ <- append(Control.Je(lEnd))
+    arg2 <- gen(node.arg2, st)
+    _ <- append(Copy.Mov(arg2, r10))
+    _ <- append(Label(lEnd))
     t <- nextTmp
-    _ <- append(lir.Copy.Mov(arg1.ret, r10))
-    _ <- append(lir.Arith.Cmp(if (isAnd) 0L else 1L, r10))
-    _ <- append(lir.Control.Je(lEnd))
-    _ <- extend(arg2.code)
-    _ <- append(lir.Copy.Mov(arg2.ret, r10))
-    _ <- append(lir.Label(lEnd))
-    _ <- append(lir.Copy.Mov(r10, t), t)
-  } yield ()
+    _ <- append(Copy.Mov(r10, t))
+  } yield t
 
-  /** Generate code for comparisons. Assumes that arg1 code is already on the stack */
-  def leaveCmp(arg1: Fragment, arg2: Fragment, op: Op): BState[Unit] = for {
+  def genCmp(node: ir.Expr.BinaryOp, st: SymbolCtx): BState[Location.Name] = for {
     t <- nextTmp
-    _ <- extend(arg2.code)
-    _ <- append(lir.Copy.Mov(arg1.ret, r10))
-    _ <- append(lir.Copy.Mov(arg2.ret, r11))
-    _ <- append(lir.Arith.Cmp(r10, r11))
-    _ <- append(lir.Copy.Mov(0L, r10))
-    _ <- append(lir.Copy.Mov(1L, r11))
-    _ <- append(op match {
-      case Op.Eqq() => lir.Copy.Cmove(r11, r10)
-      case Op.Neq() => lir.Copy.Cmovne(r11, r10)
-      case Op.Lt() => lir.Copy.Cmovl(r11, r10)
-      case Op.Gt() => lir.Copy.Cmovg(r11, r10)
-      case Op.Lte() => lir.Copy.Cmovle(r11, r10)
-      case Op.Gte() => lir.Copy.Cmovge(r11, r10)
+    arg1 <- gen(node.arg1, st)
+    arg2 <- gen(node.arg2, st)
+    _ <- append(Copy.Mov(arg1, r10))
+    _ <- append(Copy.Mov(arg2, r11))
+    _ <- append(Arith.Cmp(r10, r11))
+    _ <- append(Copy.Mov(0L, r10))
+    _ <- append(Copy.Mov(1L, r11))
+    _ <- append(node.op match {
+      case ir.Op.Eqq() => Copy.Cmove(r11, r10)
+      case ir.Op.Neq() => Copy.Cmovne(r11, r10)
+      case ir.Op.Lt() => Copy.Cmovl(r11, r10)
+      case ir.Op.Gt() => Copy.Cmovg(r11, r10)
+      case ir.Op.Lte() => Copy.Cmovle(r11, r10)
+      case ir.Op.Gte() => Copy.Cmovge(r11, r10)
       case _ => throw new RuntimeException
     })
-    _ <- append(lir.Copy.Mov(r10, t), t)
-  } yield ()
+    _ <- append(Copy.Mov(r10, t))
+  } yield t
 
-  /** Generate code for plus, minus, and times. Assumes that arg1 code is already on the stack */
-  def leavePlusMinusTimes(arg1: Fragment, arg2: Fragment, op: Op): BState[Unit] = for {
+  def genPlusMinusTimes(node: ir.Expr.BinaryOp, st: SymbolCtx): BState[Location.Name] = for {
     t <- nextTmp
-    _ <- extend(arg2.code)
-    _ <- append(lir.Copy.Mov(arg1.ret, r10))
-    _ <- append(lir.Copy.Mov(arg2.ret, r11))
-    _ <- append(op match {
-      case Op.Plus() => lir.Arith.Add(r11, r10)
-      case Op.Minus() => lir.Arith.Sub(r11, r10)
-      case Op.Times() => lir.Arith.Imul(r11, r10)
+    arg1 <- gen(node.arg1, st)
+    arg2 <- gen(node.arg2, st)
+    _ <- append(Copy.Mov(arg1, r10))
+    _ <- append(Copy.Mov(arg2, r11))
+    _ <- append(node.op match {
+      case ir.Op.Plus() => Arith.Add(r11, r10)
+      case ir.Op.Minus() => Arith.Sub(r11, r10)
+      case ir.Op.Times() => Arith.Imul(r11, r10)
       case _ => throw new RuntimeException
     })
-    _ <- append(lir.Copy.Mov(r10, t), t)
-  } yield ()
+    _ <- append(Copy.Mov(r10, t))
+  } yield t
 
-  /** Generate code for divide and mod. Assumes that arg1 code is already on the stack */
-  def leaveDiv(arg1: Fragment, arg2: Fragment, op: Op): BState[Unit] = for {
+  def genDiv(node: ir.Expr.BinaryOp, st: SymbolCtx): BState[Location.Name] = for {
     t <- nextTmp
-    _ <- extend(arg2.code)
-    _ <- append(lir.Copy.Mov(0L, rdx))
-    _ <- append(lir.Copy.Mov(arg1.ret, rax))
-    _ <- append(lir.Copy.Mov(arg2.ret, r10))
-    _ <- append(lir.Arith.Idiv(r10))
-    ret = op match {
-      case Op.Div() => rax
-      case Op.Mod() => rdx
+    arg1 <- gen(node.arg1, st)
+    arg2 <- gen(node.arg2, st)
+    _ <- append(Copy.Mov(0L, rdx))
+    _ <- append(Copy.Mov(arg1, rax))
+    _ <- append(Copy.Mov(arg2, r10))
+    _ <- append(Arith.Idiv(r10))
+    ret = node.op match {
+      case ir.Op.Div() => rax
+      case ir.Op.Mod() => rdx
       case _ => throw new RuntimeException
     }
-    _ <- append(lir.Copy.Mov(ret, t), t)
-  } yield ()
+    _ <- append(Copy.Mov(ret, t))
+  } yield t
 
-  def leave(node: Stmt, st: SymbolTable): BState[Unit] = node match {
-    case _: Stmt.Assign | _: Stmt.PlusAssign | _: Stmt.MinusAssign => leaveAssign(node)
-    //    case Stmt.Cond(p, _, _) =>
-    //    case Stmt.For(_, start, stop, _, _) =>
-    //    case Stmt.While(cond, _) =>
-    //    case Stmt.Return(None) => getMethodType(t) match {
-    //    case Stmt.Return(_) => getMethodType(t) match {
+  implicit def gen(node: ir.Stmt, st: SymbolCtx): BState[Unit] = node match {
+    case n: ir.Stmt.Assign => genAssign(node, n.location, n.e, st)
+    case n: ir.Stmt.PlusAssign => genAssign(node, n.location, n.e, st)
+    case n: ir.Stmt.MinusAssign => genAssign(node, n.location, n.e, st)
+    //    case ir.Stmt.Cond(p, _, _) =>
+    //    case ir.Stmt.For(_, start, stop, _, _) =>
+    //    case ir.Stmt.While(cond, _) =>
+    //    case ir.Stmt.Return(None) => getMethodType(t) match {
+    //    case ir.Stmt.Return(_) => getMethodType(t) match {
     //    case _ => Result.Good(t)
   }
 
-  def leaveAssign(node: Stmt): BState[Unit] = for {
-    (loc: Fragment, e: Fragment) <- pop & pop
-    _ <- extend(loc.code)
-    _ <- extend(e.code)
-    _ <- append(lir.Copy.Mov(loc.ret, r10))
-    _ <- append(lir.Copy.Mov(e.ret, r11))
+  def genAssign(node: ir.Stmt, loc: ir.Location, e: ir.Expr, st: SymbolCtx): BState[Unit] = for {
+    l <- gen(loc, st)
+    r <- gen(e, st)
+    _ <- append(Copy.Mov(l, r10))
+    _ <- append(Copy.Mov(r, r11))
     _ <- node match {
-      case n: Stmt.Assign => append(lir.Copy.Mov(r11, r10))
-      case n: Stmt.PlusAssign => append(lir.Arith.Add(r11, r10))
-      case n: Stmt.MinusAssign => append(lir.Arith.Sub(r11, r10))
+      case _: ir.Stmt.Assign => append(Copy.Mov(r11, r10))
+      case _: ir.Stmt.PlusAssign => append(Arith.Add(r11, r10))
+      case _: ir.Stmt.MinusAssign => append(Arith.Sub(r11, r10))
     }
-    _ <- append(lir.Copy.Mov(r10, loc.ret))
+    _ <- append(Copy.Mov(r10, l))
   } yield ()
 
-  def leave(node: Location, st: SymbolTable): BState[Unit] = node match {
-    case Location.Var(id) => push(Fragment(Nil, idToName(id, st)))
-    case Location.Cell(id, _) => for {
-      f <- top
+  def gen(node: ir.Location, st: SymbolCtx): BState[Location.Name] = node match {
+    case ir.Location.Var(id) => pure(idToName(node, id, st))
+    case ir.Location.Cell(id, index) => for {
+      tIndex <- gen(index, st)
+
+      // Bound checking
+      size = arraySize(node, id, st)
+      _ <- append(Arith.Cmp(size, tIndex))
+      _ <- append(Copy.Mov(0L, r10))
+      _ <- append(Copy.Mov(1L, r11))
+      _ <- append(Copy.Cmovle(r11, r10))
+      _ <- append(Arith.Cmp(1L, r10))
+      _ <- append(Control.Je(throwOutOfBound.name))
+
       t <- nextTmp
-      _ <- append(lir.Copy.Mov(lir.Location.Array(idToName(id, st), f.ret.name), t), t)
-    } yield ()
+      _ <- append(Copy.Mov(Location.Array(idToName(node, id, st), tIndex), t)
+    } yield t
   }
+
+  def gen(node: ir.MethodCall, st: SymbolCtx): BState[Unit] = for {
+    args: List[Location.Name] <- genList(node.args, st)
+    _ <- genPushArgs(args, 0)
+    _ <- append(Control.Call(idToName(node, node.method, st)))
+  } yield ()
+
+  def gen(node: ir.MethodArg, st: SymbolCtx): BState[Location.Name] = node match {
+    case ir.MethodArg.ExprArg(e) => gen(e, st)
+    case ir.MethodArg.StringArg(s) => // TODO a standard way of postin a string
+  }
+
+  def genPushArgs(args: List[Location.Name], i: Int): BState[Unit] =
 }

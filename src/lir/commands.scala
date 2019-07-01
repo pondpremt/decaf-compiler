@@ -42,7 +42,7 @@ object Stack {
 
   // final case class Enter(size: Long) extends Stack
 
-  // final case object Leave extends Stack
+  final case object Leave extends Stack
 
   final case class Push(src: Source) extends Stack
 
@@ -56,13 +56,15 @@ object Control {
 
   final case class Call(target: Target) extends Control
 
-  final case class Ret(src: Source) extends Control
+  final case object Ret extends Control
 
   final case class Jmp(target: Target) extends Control
 
   final case class Je(target: Target) extends Control
 
   final case class Jne(target: Target) extends Control
+
+  final case class Syscall() extends Control
 
 }
 

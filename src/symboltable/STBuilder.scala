@@ -25,9 +25,7 @@ object STBuilder extends STListener[STBuilderState] {
 
   def make(scope: STScope, s: S): S = (SymbolTable.make(s._1, scope), s._2)
 
-  override def enter(node: Ir, s: S): S = _enter(node, (s._1, s._2.copy(ctx = s._2.ctx + ((node, s._1)))))
-
-  def _enter(node: Ir, s: S): S = node match {
+  override def enter(node: Ir, s: S): S = node match {
     case CalloutDecl(id) =>
       put(node, id.name, Descriptor.Callout(s._2.uid), s)
     case FieldDecl(typ, _) =>
@@ -48,7 +46,7 @@ object STBuilder extends STListener[STBuilderState] {
 
   override def leave(node: Ir, s: S): S = node match {
     case _: Block | _: MethodDecl | _: Program =>
-      (s._1.parent.getOrElse(s._1), s._2.copy(sts = s._1 :: s._2.sts))
-    case _ => s
+      (s._1.parent.getOrElse(s._1), s._2.copy(sts = s._1 :: s._2.sts, ctx = s._2.ctx + ((node, s._1))))
+    case _ => (s._1, s._2.copy(ctx = s._2.ctx + ((node, s._1))))
   }
 }

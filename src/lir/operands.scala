@@ -6,6 +6,8 @@ object Source {
 
   final case class Lit(value: Long) extends Source
 
+  final case class String(target: Target) extends Source
+
   final case class Loc(loc: Location) extends Source
 
 }
