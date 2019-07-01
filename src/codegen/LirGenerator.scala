@@ -26,38 +26,44 @@ object LirGenerator {
     case _ => throw new RuntimeException
   }
 
-  def strName(name: String): String = ".STR_" + name
+  /** Label name for throwing out-of-bound error */
+  def throwOOB: String = "THROW_OutOfBound"
 
-  def throwOutOfBound = Method("THROW_OutOfBound", Nil, List(
-    Copy.Mov(strName("SYS_OutOfBound"), rdi),
-    Copy.Mov(0L, rax),
-    Control.Call("printf"),
-    Copy.Mov(60L, rax),
-    Copy.Mov(-1L, rdi),
-    Control.Syscall()
-  ))
+  /** Label name for method falloff error */
+  def throwFalloff: String = "THROW_Falloff"
 
-  def throwFalloff = Method("THROW_Falloff", Nil, List(
-    Copy.Mov(strName("SYS_Falloff"), rdi),
-    Copy.Mov(0L, rax),
-    Control.Call("printf"),
-    Copy.Mov(60L, rax),
-    Copy.Mov(-2L, rdi),
-    Control.Syscall()
-  ))
-
-  def sysStrings = List(
-    Str(strName("SYS_OutOfBound"), "Array index out of bound"),
-    Str(strName("SYS_Falloff"), "Method did not return"))
-
-  def sysMethods = List(throwOutOfBound, throwFalloff)
-
-  def initState: Builder = Builder(Nil, Nil, Program(Nil, sysStrings, sysMethods), 0, isGlobal = true)
+  def initState: Builder = Builder(Nil, Nil, Program(Nil, Nil, Nil), 0, isGlobal = true)
 
   // def genLir(node: ir.Program, st: Map[ir.Ir, SymbolTable]:
 
-  implicit def gen(node: ir.Program, st: SymbolCtx): BState[Unit] =
-    genList(node.fields, st) >> genList(node.methods, st) >> pure()
+  implicit def gen(node: ir.Program, st: SymbolCtx): BState[Unit] = for {
+    strOOB <- declString("Array index out of bound")
+    strFalloff <- declString("Method did not return")
+
+    methods = List(
+      Method(throwOOB, Nil, List(
+        Copy.Mov(strOOB, rdi),
+        Copy.Mov(0L, rax),
+        Control.Call("printf"),
+        Copy.Mov(60L, rax),
+        Copy.Mov(-1L, rdi),
+        Control.Syscall())),
+      Method(throwFalloff, Nil, List(
+        Copy.Mov(strFalloff, rdi),
+        Copy.Mov(0L, rax),
+        Control.Call("printf"),
+        Copy.Mov(60L, rax),
+        Copy.Mov(-2L, rdi),
+        Control.Syscall())))
+
+    s1 <- get
+    _ <- put(s1.copy(program = s1.program.copy(methods = methods ::: s1.program.methods)))
+    _ <- genList(node.fields, st)
+    _ <- genList(node.methods, st)
+    s2 <- get
+    // Reverse method list so that the methods are in the same order as the source file
+    _ <- put(s2.copy(program = s2.program.copy(methods = s2.program.methods.reverse)))
+  } yield ()
 
   implicit def gen(node: ir.FieldDecl, st: SymbolCtx): BState[Unit] =
     genList(node.ids, st) >> pure()
@@ -73,10 +79,11 @@ object LirGenerator {
     _ <- gen(node.body, st)
     _ <- node.typ.typ match {
       case ir.VoidableType.VoidT => append(Stack.Leave) >> append(Control.Ret)
-      case _ => append(Control.Jmp(throwFalloff.name))
+      case _ => append(Control.Jmp(throwFalloff))
     }
     s <- get
-    method = Method(idToName(node, node.id, st), s.decls, s.code)
+    // Since instruction lists are prepended, reverse them so that they are in the right order
+    method = Method(idToName(node, node.id, st), s.decls.reverse, s.code.reverse)
     _ <- put(s.copy(code = Nil, decls = Nil, program = s.program.copy(methods = method :: s.program.methods)))
   } yield ()
 
@@ -84,8 +91,6 @@ object LirGenerator {
 
   implicit def gen(node: ir.Block, st: SymbolCtx): BState[Unit] =
     genList(node.fields, st) >> genList(node.stmts, st) >> pure()
-
-  implicit def gen(node: ir.Stmt, st: SymbolCtx): BState[Unit] = pure()
 
   def genList[A, B](nodes: List[A], st: SymbolCtx)(implicit gen: (A, SymbolCtx) => BState[B]): BState[List[B]] =
     nodes match {
@@ -256,23 +261,32 @@ object LirGenerator {
       _ <- append(Copy.Mov(1L, r11))
       _ <- append(Copy.Cmovle(r11, r10))
       _ <- append(Arith.Cmp(1L, r10))
-      _ <- append(Control.Je(throwOutOfBound.name))
+      _ <- append(Control.Je(throwOOB))
 
       t <- nextTmp
-      _ <- append(Copy.Mov(Location.Array(idToName(node, id, st), tIndex), t)
+      _ <- append(Copy.Mov(Location.Array(idToName(node, id, st), tIndex), t))
     } yield t
   }
 
   def gen(node: ir.MethodCall, st: SymbolCtx): BState[Unit] = for {
-    args: List[Location.Name] <- genList(node.args, st)
+    args <- genList(node.args, st)
     _ <- genPushArgs(args, 0)
     _ <- append(Control.Call(idToName(node, node.method, st)))
   } yield ()
 
-  def gen(node: ir.MethodArg, st: SymbolCtx): BState[Location.Name] = node match {
+  implicit def gen(node: ir.MethodArg, st: SymbolCtx): BState[Location.Name] = node match {
     case ir.MethodArg.ExprArg(e) => gen(e, st)
-    case ir.MethodArg.StringArg(s) => // TODO a standard way of postin a string
+    case ir.MethodArg.StringArg(s) => declString(s) >>| Location.Name
   }
 
-  def genPushArgs(args: List[Location.Name], i: Int): BState[Unit] =
+  def genPushArgs(args: List[Location.Name], i: Int): BState[Unit] = (args, i) match {
+    case (x :: xs, 0) => append(Copy.Mov(x, rdi)) >> genPushArgs(xs, i + 1)
+    case (x :: xs, 1) => append(Copy.Mov(x, rsi)) >> genPushArgs(xs, i + 1)
+    case (x :: xs, 2) => append(Copy.Mov(x, rdx)) >> genPushArgs(xs, i + 1)
+    case (x :: xs, 3) => append(Copy.Mov(x, rcx)) >> genPushArgs(xs, i + 1)
+    case (x :: xs, 4) => append(Copy.Mov(x, r8))  >> genPushArgs(xs, i + 1)
+    case (x :: xs, 5) => append(Copy.Mov(x, r9))  >> genPushArgs(xs.reverse, i + 1)
+    case (x :: xs, _) => append(Stack.Push(x))    >> genPushArgs(xs, i + 1)
+    case _ => pure()
+  }
 }
