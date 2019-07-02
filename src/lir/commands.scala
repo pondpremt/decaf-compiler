@@ -14,11 +14,11 @@ final case class Str(name: String, text: String) extends Lir
 
 sealed abstract class Stmt
 
-final case class Label(name: String) extends Stmt
-
 sealed abstract class Copy extends Stmt
 
 object Copy {
+
+  final case class Lea(src: Source, dest: Location) extends Copy
 
   final case class Mov(src: Source, dest: Location) extends Copy
 
@@ -40,7 +40,7 @@ sealed abstract class Stack extends Stmt
 
 object Stack {
 
-  // final case class Enter(size: Long) extends Stack
+  final case class Enter(size: Long) extends Stack
 
   final case object Leave extends Stack
 
@@ -54,17 +54,21 @@ sealed abstract class Control extends Stmt
 
 object Control {
 
-  final case class Call(target: Target) extends Control
+  final case class Call(target: String) extends Control
 
   final case object Ret extends Control
 
-  final case class Jmp(target: Target) extends Control
+  final case class Jmp(target: String) extends Control
 
-  final case class Je(target: Target) extends Control
+  final case class Je(target: String) extends Control
 
-  final case class Jne(target: Target) extends Control
+  final case class Jne(target: String) extends Control
 
-  final case class Syscall() extends Control
+  final case object Syscall extends Control
+
+  final case class Label(name: String) extends Control
+
+  final case object Nop extends Control
 
 }
 

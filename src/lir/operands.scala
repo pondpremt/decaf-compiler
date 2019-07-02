@@ -6,8 +6,6 @@ object Source {
 
   final case class Lit(value: Long) extends Source
 
-  final case class String(target: Target) extends Source
-
   final case class Loc(loc: Location) extends Source
 
 }
@@ -18,21 +16,9 @@ object Location {
 
   final case class Reg(reg: Register) extends Location
 
-  final case class Addr(offset: Long, reg: Register, reg2: Option[Register]) extends Location
+  final case class Addr(offset: Either[Long, String], reg: Option[Register], reg2: Option[Register], scale: Long) extends Location
 
   final case class Name(name: String) extends Location
-
-  final case class Array(name: String, offset: String) extends Location
-
-}
-
-sealed abstract class Target
-
-object Target {
-
-  // final case class Addr(offset: Long, reg: Register) extends Target
-
-  final case class Label(name: String) extends Target
 
 }
 
@@ -45,6 +31,7 @@ object Registers {
   val rdx: Register = Register("rdx")
   val rsp: Register = Register("rsp")
   val rbp: Register = Register("rbp")
+  val rip: Register = Register("rip")
   val rsi: Register = Register("rsi")
   val rdi: Register = Register("rdi")
   val r8: Register = Register("r8")
@@ -58,11 +45,6 @@ object Registers {
 }
 
 object Conversion {
-
-  // implicit def sourceToLocation: Source => Location = {
-  //   case Source.Loc(loc) => loc
-  //   case _ => throw new RuntimeException("A literal is not a location")
-  // }
 
   implicit def locationToSource: Location => Source = Source.Loc
 
@@ -79,8 +61,6 @@ object Conversion {
   implicit def stringToLocation: String => Location = stringToName
 
   implicit def stringToSource: String => Source = stringToLocation andThen locationToSource
-
-  implicit def stringToTarget: String => Target = Target.Label
 
 
 }

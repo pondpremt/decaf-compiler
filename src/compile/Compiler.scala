@@ -31,6 +31,7 @@ object Compiler {
       case CLI.Action.SCAN => scan(CLI.infile); System.exit(0)
       case CLI.Action.PARSE => if (parse(CLI.infile) == null) System.exit(1) else System.exit(0)
       case CLI.Action.INTER => if (inter(CLI.infile) == null) System.exit(1) else System.exit(0)
+      case CLI.Action.ASSEMBLY => if (assembly(CLI.infile) == null) System.exit(1) else System.exit(0)
     }
   }
 
@@ -129,5 +130,27 @@ object Compiler {
       tc._2._2._2._2._2._2._1
     print(errs.map(_.toString).mkString("\n"))
     if (errs.nonEmpty) null else ast
+  }
+
+  def assembly(fileName: String): lir.Program = {
+    val ast = inter(fileName)
+    if (ast == null) return null
+
+    val st = ir.Walk(STBuilder).walkIr(ast)._2.ctx
+    val asm1 = codegen.LirGenerator.genLir(ast, st)
+
+    if (CLI.debug) {
+      println(codegen.CodeGenerator.gen(asm1))
+    }
+
+    // Resolve temporary names
+    val asm2 = codegen.LocalVarResolver.run(asm1)
+
+    // Output to file
+    val pw = new PrintWriter(new File(CLI.outfile))
+    pw.write(codegen.CodeGenerator.gen(asm2))
+    pw.close()
+
+    asm2
   }
 }

@@ -25,17 +25,6 @@ final case class State[S, A](run: S => (A, S)) {
     f(sNew)
   })
 
-  def << [B](f: State[S, B]): State[S, A] = State(s => {
-    val (_, sNew) = f(s)
-    run(sNew)
-  })
-
-  def &[B](f: State[S, B]): State[S, (A, B)] = State(s => {
-    val (a, s2) = run(s)
-    val (b, s3) = f(s2)
-    ((a, b), s3)
-  })
-
 }
 
 object State {

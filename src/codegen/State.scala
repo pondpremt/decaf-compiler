@@ -18,7 +18,7 @@ object State {
   def append(stmt: Stmt): BState[Unit] = extend(List(stmt))
 
   def extend(stmts: List[Stmt]): BState[Unit] =
-    get >>= (s => put(s.copy(code = stmts :: s.code)))
+    get >>= (s => put(s.copy(code = stmts ::: s.code)))
 
   def declVar(name: String): BState[Unit] = get >>= (s => {
     if (s.isGlobal)
@@ -47,6 +47,8 @@ object State {
 
   def nextCount: BState[Int] = get >>= (s => put(s.copy(counter = s.counter + 1)) >> pure(s.counter))
 
-  def nextTmp: BState[Location.Name] = nextCount >>| (counter => Location.Name("__&tmp_" + counter))
-
+  def nextTmp: BState[Location.Name] = for {
+    name <- nextCount >>| ("TMP_" + _)
+    _ <- declVar(name)
+  } yield Location.Name(name)
 }

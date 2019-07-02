@@ -11,6 +11,12 @@ final case class SymbolTable(parent: Option[SymbolTable], scope: STScope, tab: M
     case _ => None
   })
 
+  /** Return the scope where 's' is found */
+  def findScope(s: String): Option[STScope] = tab.get(s) match {
+    case Some(_) => Some(scope)
+    case _ => parent.flatMap(_.findScope(s))
+  }
+
 }
 
 object SymbolTable {
