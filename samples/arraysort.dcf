@@ -1,0 +1,33 @@
+callout printf;
+
+void main() {
+    int x[10];
+    int n;
+    int i, j, tmp;
+    n = @x;
+    for (i = 0, n) {
+        x[i] = i;
+    }
+    for (i = 0, n) {
+        for (j = i, n) {
+            if (x[j] > x[i]) {
+                tmp = x[i];
+                x[i] = x[j];
+                x[j] = tmp;
+            }
+        }
+    }
+    for (i = 0, n) {
+        printf("%d ", x[i]);
+    }
+    printf("\n");
+    for (i = 1, n) {
+        x[i] += x[i-1];
+    }
+    for (i = 0, n) {
+        printf("%d ", x[i]);
+    }
+    printf("\n");
+}
+
+

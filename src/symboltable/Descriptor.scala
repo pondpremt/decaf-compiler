@@ -3,17 +3,28 @@ package symboltable
 import ir.{FunctionType, PrimitiveType}
 
 sealed abstract class Descriptor {
-  val uid: Long
+
+  val uid: Descriptor.UID = Descriptor.newUid()
+
 }
 
 object Descriptor {
 
-  final case class Variable(uid: Long, typ: PrimitiveType) extends Descriptor
+  type UID = Long
 
-  final case class Array(uid: Long, typ: PrimitiveType, size: Long) extends Descriptor
+  private var uid: UID = 0L
 
-  final case class Method(uid: Long, typ: FunctionType) extends Descriptor
+  private def newUid(): UID = {
+    uid += 1;
+    uid
+  }
 
-  final case class Callout(uid: Long) extends Descriptor
+  final case class Variable(typ: PrimitiveType) extends Descriptor
+
+  final case class Array(typ: PrimitiveType, size: Long) extends Descriptor
+
+  final case class Method(typ: FunctionType) extends Descriptor
+
+  final case class Callout() extends Descriptor
 
 }

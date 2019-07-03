@@ -2,6 +2,12 @@ package lir
 
 sealed abstract class Lir
 
+object Lir {
+
+  val wordSize: Long = 8
+
+}
+
 final case class Program(decls: List[Global], strings: List[Str], methods: List[Method]) extends Lir
 
 final case class Method(name: String, decls: List[Local], stmts: List[Stmt]) extends Lir
@@ -63,6 +69,10 @@ object Control {
   final case class Je(target: String) extends Control
 
   final case class Jne(target: String) extends Control
+
+  final case class Jl(target: String) extends Control
+
+  final case class Jge(target: String) extends Control
 
   final case object Syscall extends Control
 

@@ -35,5 +35,7 @@ object State {
 
   def pure[S, A](a: A): State[S, A] = State(s => (a, s))
 
+  def update[S](f: S => S): State[S, Unit] = State(s => ((), f(s)))
+
 }
 

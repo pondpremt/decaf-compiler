@@ -1,0 +1,13 @@
+callout printf;
+
+int f(int n) {
+    if (n <= 1) {
+        return n;
+    } else {
+        return f(n-1) + f(n-2);
+    }
+}
+
+void main() {
+    printf("Hello, World! %d %d %d %d %d %d %d\n", f(0), f(1), f(2), f(3), f(4), f(5), f(6));
+}

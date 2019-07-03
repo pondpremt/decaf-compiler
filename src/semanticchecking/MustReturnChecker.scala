@@ -5,7 +5,7 @@ import symboltable.SymbolTable
 
 object MustReturnChecker extends SemanticChecker[List[Boolean]] {
 
-  // Checked: 6
+  // Currently not used
 
   // Each statement pushes true if it definitely returns and false otherwise.
   // Each block pushes true if it definitely returns and false otherwise.

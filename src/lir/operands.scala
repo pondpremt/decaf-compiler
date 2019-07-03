@@ -16,7 +16,10 @@ object Location {
 
   final case class Reg(reg: Register) extends Location
 
-  final case class Addr(offset: Either[Long, String], reg: Option[Register], reg2: Option[Register], scale: Long) extends Location
+  final case class Addr(offset: Either[Long, String],
+                        reg: Option[Register],
+                        reg2: Option[Register],
+                        scale: Long) extends Location
 
   final case class Name(name: String) extends Location
 

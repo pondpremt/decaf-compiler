@@ -1,0 +1,22 @@
+callout printf;
+
+boolean t() {
+    printf("T");
+    return true;
+}
+
+boolean f() {
+    printf("F");
+    return false;
+}
+
+void main() {
+    printf(" T && T = %d\n", t() && t());
+    printf(" T && F = %d\n", t() && f());
+    printf(" F && T = %d\n", f() && t());
+    printf(" F && F = %d\n", f() && f());
+    printf(" T || T = %d\n", t() || t());
+    printf(" T || F = %d\n", t() || f());
+    printf(" F || T = %d\n", f() || t());
+    printf(" F || F = %d\n", f() || f());
+}

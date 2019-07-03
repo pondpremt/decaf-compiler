@@ -1,12 +1,18 @@
 package codegen
 
+import lir.Conversion._
 import lir.Registers._
 import lir._
 
+
 /** Take an LIR and convert names to appropriate addressing */
-object NameResolver {
+object VarResolver {
 
   def run(n: Program): Program = n.copy(methods = n.methods.map(resolve))
+
+  private def initMem(size: Long): List[Stmt] = for {
+    i <- (-size / Lir.wordSize until 0).toList
+  } yield Copy.Mov(0L, Location.Addr(Left(i * Lir.wordSize), Some(rbp), None, 1L))
 
   private def resolve: Method => Method = {
     case Method(name, decls, stmts) =>
@@ -15,7 +21,7 @@ object NameResolver {
         val newBase = accum._2 + decl.size
         (accum._1 + ((decl.name, newBase)), newBase)
       }
-      Method(name, Nil, Stack.Enter(size) :: stmts.map(s => resolve(s, map)))
+      Method(name, Nil, Stack.Enter(size) :: initMem(size) ::: stmts.map(s => resolve(s, map)))
   }
 
   private def resolve(_n: Stmt, m: Map[String, Long]): Stmt = _n match {

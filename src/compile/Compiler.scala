@@ -115,17 +115,12 @@ object Compiler {
     }
 
     val checker = STListenerPair(STBuilder,
-      symboltable.STListenerPair(MustReturnChecker,
         symboltable.STListenerPair(BreakContChecker,
           symboltable.STListenerPair(LitIntChecker,
-            symboltable.STListenerPair(IDChecker, TypeChecker)))))
+            symboltable.STListenerPair(IDChecker, TypeChecker))))
     val tc = ir.Walk(checker).walkIr(ast)
-    val errs = tc._2._1.errs :::
-      tc._2._2._1._1 :::
-      tc._2._2._2._1._1 :::
-      tc._2._2._2._2._1._1 :::
-      tc._2._2._2._2._2._1._1 :::
-      tc._2._2._2._2._2._2._1
+    // TODO this is ugly. Find a better abstraction
+    val errs = tc._2._1.errs ::: tc._2._2._1._1 ::: tc._2._2._2._1._1 ::: tc._2._2._2._2._1._1 ::: tc._2._2._2._2._2._1
     print(errs.map(_.toString).mkString("\n"))
     if (errs.nonEmpty) null else ast
   }
@@ -142,7 +137,7 @@ object Compiler {
     }
 
     // Resolve temporary names
-    val asm2 = codegen.NameResolver.run(asm1)
+    val asm2 = codegen.VarResolver.run(asm1)
 
     // Output to file
     val pw = new PrintWriter(new File(CLI.outfile))
