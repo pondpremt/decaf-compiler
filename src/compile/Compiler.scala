@@ -84,7 +84,7 @@ object Compiler {
         println("[ERROR] Parse failed:")
         return null
       } else if (CLI.debug){
-        traverseParseTree(t, "")
+        // traverseParseTree(t, "")
       }
       t
     } catch {
@@ -111,9 +111,7 @@ object Compiler {
 
     if (CLI.debug) {
       val s = ir.Walk(PrettyPrintListener).walkIr(ast)
-      println("PPrint\n" + s._2.head)
-      val st = ir.Walk(STBuilder).walkIr(ast)
-      print("Symbol Tables\n" + st.toString() + "\n")
+      println(s._2.head)
     }
 
     val checker = STListenerPair(STBuilder,
@@ -144,7 +142,7 @@ object Compiler {
     }
 
     // Resolve temporary names
-    val asm2 = codegen.LocalVarResolver.run(asm1)
+    val asm2 = codegen.NameResolver.run(asm1)
 
     // Output to file
     val pw = new PrintWriter(new File(CLI.outfile))

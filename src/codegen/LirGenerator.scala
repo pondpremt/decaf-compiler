@@ -59,8 +59,10 @@ object LirGenerator {
     _ <- genList(node.fields, st)
     _ <- genList(node.methods, st)
     s2 <- get
-    // Reverse method list so that the methods are in the same order as the source file
-    _ <- put(s2.copy(program = s2.program.copy(methods = s2.program.methods.reverse)))
+    // Reverse method and string lists so that they show up in the same order as the source file
+    _ <- put(s2.copy(program = s2.program.copy(
+      methods = s2.program.methods.reverse,
+      strings = s2.program.strings.reverse)))
   } yield ()
 
   private implicit def gen(node: ir.FieldDecl, st: SymbolCtx): BState[Unit] =
@@ -226,11 +228,12 @@ object LirGenerator {
     case n: ir.Stmt.PlusAssign => genAssign(node, n.location, n.e, st)
     case n: ir.Stmt.MinusAssign => genAssign(node, n.location, n.e, st)
     case n: ir.Stmt.Cond => gen(n, st)
+    case n: ir.Stmt.CallStmt => gen(n.call, st)
     //    case n: ir.Stmt.For => gen(n, st)
     //    case ir.Stmt.While(cond, _) =>
-    //    case ir.Stmt.Return(None) => getMethodType(t) match {
-    //    case ir.Stmt.Return(_) => getMethodType(t) match {
-    case _ => pure()
+    //    case ir.Stmt.Break =>
+    //    case ir.Stmt.Continue =>
+    case n: ir.Stmt.Return => gen(n, st)
   }
 
   private def genAssign(node: ir.Stmt, loc: ir.Location, e: ir.Expr, st: SymbolCtx): BState[Unit] = for {
@@ -263,6 +266,16 @@ object LirGenerator {
     _ <- gen(node.t, st)
     _ <- append(Control.Label(lEnd))
   } yield ()
+
+  private def gen(node: ir.Stmt.Return, st: SymbolCtx): BState[Unit] = for {
+    _ <- node.value match {
+      case Some(e) => gen(e, st) >>= (t => append(Copy.Mov(t, rax)))
+      case _ => append(Control.Nop)
+    }
+    _ <- append(Stack.Leave)
+    _ <- append(Control.Ret)
+  } yield ()
+
 
   private def gen(node: ir.Location, st: SymbolCtx): BState[Location.Name] = node match {
     case ir.Location.Var(id) => pure(idToName(node, id, st))
@@ -305,12 +318,18 @@ object LirGenerator {
   private def gen(node: ir.MethodCall, st: SymbolCtx): BState[Unit] = for {
     args <- genList(node.args, st)
     _ <- genPushArgs(args, 0)
+    _ <- if (node.method.name == "printf") append(Copy.Mov(0L, rax)) else append(Control.Nop)
     _ <- append(Control.Call(idToName(node, node.method, st)))
   } yield ()
 
   private implicit def gen(node: ir.MethodArg, st: SymbolCtx): BState[Location.Name] = node match {
     case ir.MethodArg.ExprArg(e) => gen(e, st)
-    case ir.MethodArg.StringArg(s) => declString(s) >>| Location.Name
+    case ir.MethodArg.StringArg(s) => for {
+      name <- declString(s) >>| Location.Name
+      t <- nextTmp
+      _ <- append(Copy.Lea(name, r10))
+      _ <- append(Copy.Mov(r10, t))
+    } yield t
   }
 
   private def genPushArgs(args: List[Location.Name], i: Int): BState[Unit] = (args, i) match {

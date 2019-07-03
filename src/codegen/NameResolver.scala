@@ -3,8 +3,8 @@ package codegen
 import lir.Registers._
 import lir._
 
-/** Take an LIR, convert local variable names to memory location, and add appropriate 'enter' preamble */
-object LocalVarResolver {
+/** Take an LIR and convert names to appropriate addressing */
+object NameResolver {
 
   def run(n: Program): Program = n.copy(methods = n.methods.map(resolve))
 
