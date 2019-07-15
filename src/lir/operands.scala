@@ -6,6 +6,8 @@ object Source {
 
   final case class Lit(value: Long) extends Source
 
+  final case class Str(name: String) extends Source
+
   final case class Loc(loc: Location) extends Source
 
 }
@@ -22,6 +24,8 @@ object Location {
                         scale: Long) extends Location
 
   final case class Name(name: String) extends Location
+
+  final case class Array(base: String, offset: String) extends Location
 
 }
 
@@ -45,6 +49,24 @@ object Registers {
   val r13: Register = Register("r13")
   val r14: Register = Register("r14")
   val r15: Register = Register("r15")
+}
+
+sealed abstract class CmpOp
+
+object CmpOp {
+
+  case object E extends CmpOp
+
+  case object Ne extends CmpOp
+
+  case object L extends CmpOp
+
+  case object G extends CmpOp
+
+  case object Le extends CmpOp
+
+  case object Ge extends CmpOp
+
 }
 
 object Conversion {

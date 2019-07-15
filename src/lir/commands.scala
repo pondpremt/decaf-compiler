@@ -24,21 +24,12 @@ sealed abstract class Copy extends Stmt
 
 object Copy {
 
-  final case class Lea(src: Source, dest: Location) extends Copy
+  final case class Lea(src: Source, dst: Location) extends Copy
 
-  final case class Mov(src: Source, dest: Location) extends Copy
+  final case class Mov(src: Source, dst: Location) extends Copy
 
-  final case class Cmove(src: Register, dest: Register) extends Copy
-
-  final case class Cmovne(src: Register, dest: Register) extends Copy
-
-  final case class Cmovg(src: Register, dest: Register) extends Copy
-
-  final case class Cmovl(src: Register, dest: Register) extends Copy
-
-  final case class Cmovge(src: Register, dest: Register) extends Copy
-
-  final case class Cmovle(src: Register, dest: Register) extends Copy
+  // Need to convert both src and dst to bare registers
+  final case class Cmov(op: CmpOp, src: Source, dst: Location) extends Copy
 
 }
 
@@ -52,7 +43,7 @@ object Stack {
 
   final case class Push(src: Source) extends Stack
 
-  final case class Pop(dest: Location) extends Stack
+  final case class Pop(dst: Location) extends Stack
 
 }
 
@@ -66,13 +57,7 @@ object Control {
 
   final case class Jmp(target: String) extends Control
 
-  final case class Je(target: String) extends Control
-
-  final case class Jne(target: String) extends Control
-
-  final case class Jl(target: String) extends Control
-
-  final case class Jge(target: String) extends Control
+  final case class Cjmp(op: CmpOp, target: String) extends Control
 
   final case object Syscall extends Control
 
@@ -82,15 +67,35 @@ object Control {
 
 }
 
+// TODO simplify LirGenerator to use Arith3
+
+sealed abstract class Arith3 extends Stmt
+
+object Arith3 {
+
+  final case class Add(arg1: Source, arg2: Source, dst: Location) extends Arith3
+
+  final case class Sub(arg1: Source, arg2: Source, dst: Location) extends Arith3
+
+  final case class Mul(arg1: Source, arg2: Source, dst: Location) extends Arith3
+
+  final case class Div(arg1: Source, arg2: Source, dst: Location) extends Arith3
+
+  final case class Mod(arg1: Source, arg2: Source, dst: Location) extends Arith3
+
+  final case class Cmp(op: CmpOp, arg1: Source, arg2: Source, dst: Location) extends Arith
+
+}
+
 sealed abstract class Arith extends Stmt
 
 object Arith {
 
-  final case class Add(src: Source, dest: Location) extends Arith
+  final case class Add(src: Source, dst: Location) extends Arith
 
-  final case class Sub(src: Source, dest: Location) extends Arith
+  final case class Sub(src: Source, dst: Location) extends Arith
 
-  final case class Imul(src: Source, dest: Register) extends Arith
+  final case class Imul(src: Source, dst: Register) extends Arith
 
   final case class Idiv(divisor: Source) extends Arith
 
@@ -98,9 +103,9 @@ object Arith {
 
   final case class Shl(reg: Register) extends Arith
 
-  final case class Ror(src: Source, dest: Location) extends Arith
+  final case class Ror(src: Source, dst: Location) extends Arith
 
-  final case class Cmp(src: Source, dest: Location) extends Arith
+  final case class Cmp(src: Source, dst: Location) extends Arith
 
 }
 

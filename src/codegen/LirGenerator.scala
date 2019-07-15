@@ -38,18 +38,18 @@ object LirGenerator {
     counter = 0, isGlobal = true, break = "", continue = "")
 
   private implicit def gen(node: ir.Program, st: SymbolCtx): BState[Unit] = for {
-    strOOB <- declString("\"Array index out of bound\"")
-    strFalloff <- declString("\"Method did not return\"")
+    strOOB <- declString("\"Array index out of bound\"") >>| Source.Str
+    strFalloff <- declString("\"Method did not return\"") >>| Source.Str
 
     methods = List(
       Method(throwOOB, Nil, List(
-        Copy.Lea(Location.Addr(Right(strOOB), Some(rip), None, 1L), rdi),
+        Copy.Mov(strOOB, rdi),
         Copy.Mov(0L, rax),
         Control.Call("printf"),
         Copy.Mov(-1L, rdi),
         Control.Call("exit"))),
       Method(throwFalloff, Nil, List(
-        Copy.Lea(Location.Addr(Right(strFalloff), Some(rip), None, 1L), rdi),
+        Copy.Mov(strFalloff, rdi),
         Copy.Mov(0L, rax),
         Control.Call("printf"),
         Copy.Mov(-2L, rdi),
@@ -101,9 +101,7 @@ object LirGenerator {
           case 3 => append(Copy.Mov(rcx, name))
           case 4 => append(Copy.Mov(r8, name))
           case 5 => append(Copy.Mov(r9, name))
-          case n =>
-            append(Copy.Mov(Location.Addr(Left((n - 4) * Lir.wordSize), Some(rbp), None, 1L), r10)) >>
-              append(Copy.Mov(r10, name))
+          case n => append(Copy.Mov(Location.Addr(Left((n - 4) * Lir.wordSize), Some(rbp), None, 1L), name))
         }
         _ <- genParams(xs, st, i + 1)
       } yield ()
@@ -121,12 +119,9 @@ object LirGenerator {
       t <- gen(n.t, st)
       f <- gen(n.f, st)
       tmp <- nextTmp
-      _ <- append(Copy.Mov(p, r10))
-      _ <- append(Arith.Cmp(1L, r10)) // check if p = 1
-      _ <- append(Copy.Mov(t, r10))
-      _ <- append(Copy.Mov(f, r11))
-      _ <- append(Copy.Cmove(r10, r11))
-      _ <- append(Copy.Mov(r11, tmp))
+      _ <- append(Arith.Cmp(1L, p))
+      _ <- append(Copy.Mov(f, tmp))
+      _ <- append(Copy.Cmov(CmpOp.E, t, tmp))
     } yield tmp
     case n: ir.Expr.Load => gen(n, st)
     case ir.Expr.Call(call) => for {
@@ -148,104 +143,76 @@ object LirGenerator {
     case ir.Expr.Load(ir.Location.Var(id)) => pure(idToName(id, st))
     case ir.Expr.Load(cell: ir.Location.Cell) => for {
       tLoc <- genCellLoc(cell, st)
-      _ <- append(Copy.Mov(tLoc, r10))
       t <- nextTmp
-      _ <- append(Copy.Mov(r10, t))
+      _ <- append(Copy.Mov(tLoc, t))
     } yield t
   }
 
   private def gen(node: ir.Expr.UnaryOp, st: SymbolCtx): BState[Location.Name] = for {
     v <- gen(node.arg, st)
     t <- nextTmp
-    _ <- append(Copy.Mov(v, r10))
-    r11val = node.op match {
+    base = node.op match {
       case ir.Op.Bang() => 1L
       case ir.Op.Minus() => 0L
       case _ => throw new RuntimeException
     }
-    _ <- append(Copy.Mov(r11val, r11))
-    _ <- append(Arith.Sub(r10, r11))
-    _ <- append(Copy.Mov(r11, t))
+    _ <- append(Arith3.Sub(base, v, t))
   } yield t
 
   private def gen(node: ir.Expr.BinaryOp, st: SymbolCtx): BState[Location.Name] = node.op match {
     case ir.Op.And() => genAndOr(node, st, isAnd = true)
     case ir.Op.Or() => genAndOr(node, st, isAnd = false)
     case ir.Op.Eqq() | ir.Op.Neq() | ir.Op.Lt() | ir.Op.Gt() | ir.Op.Lte() | ir.Op.Gte() => genCmp(node, st)
-    case ir.Op.Plus() | ir.Op.Minus() | ir.Op.Times() => genPlusMinusTimes(node, st)
-    case ir.Op.Div() | ir.Op.Mod() => genDiv(node, st)
+    case ir.Op.Plus() | ir.Op.Minus() | ir.Op.Times() | ir.Op.Div() | ir.Op.Mod() => genArith(node, st)
     case _ => throw new RuntimeException
   }
 
   private def genAndOr(node: ir.Expr.BinaryOp, st: SymbolCtx, isAnd: Boolean): BState[Location.Name] = for {
     lEnd <- nextCount >>| ((if (isAnd) ".and_" else ".or_") + _ + "_end")
-    arg1 <- gen(node.arg1, st)
-    _ <- append(Copy.Mov(arg1, r10))
-    _ <- append(Arith.Cmp(if (isAnd) 0L else 1L, r10))
-    _ <- append(Control.Je(lEnd))
-    arg2 <- gen(node.arg2, st)
-    _ <- append(Copy.Mov(arg2, r10))
-    _ <- append(Control.Label(lEnd))
     t <- nextTmp
-    _ <- append(Copy.Mov(r10, t))
+    arg1 <- gen(node.arg1, st)
+    _ <- append(Copy.Mov(arg1, t))
+    _ <- append(Arith.Cmp(if (isAnd) 0L else 1L, t))
+    _ <- append(Control.Cjmp(CmpOp.E, lEnd))
+    arg2 <- gen(node.arg2, st)
+    _ <- append(Copy.Mov(arg2, t))
+    _ <- append(Control.Label(lEnd))
   } yield t
 
   private def genCmp(node: ir.Expr.BinaryOp, st: SymbolCtx): BState[Location.Name] = for {
     t <- nextTmp
     arg1 <- gen(node.arg1, st)
     arg2 <- gen(node.arg2, st)
-    _ <- append(Copy.Mov(arg1, r10))
-    _ <- append(Copy.Mov(arg2, r11))
-    _ <- append(Arith.Cmp(r11, r10))
-    _ <- append(Copy.Mov(0L, r10))
-    _ <- append(Copy.Mov(1L, r11))
-    _ <- append(node.op match {
-      case ir.Op.Eqq() => Copy.Cmove(r11, r10)
-      case ir.Op.Neq() => Copy.Cmovne(r11, r10)
-      case ir.Op.Lt() => Copy.Cmovl(r11, r10)
-      case ir.Op.Gt() => Copy.Cmovg(r11, r10)
-      case ir.Op.Lte() => Copy.Cmovle(r11, r10)
-      case ir.Op.Gte() => Copy.Cmovge(r11, r10)
-      case _ => throw new RuntimeException
-    })
-    _ <- append(Copy.Mov(r10, t))
-  } yield t
-
-  private def genPlusMinusTimes(node: ir.Expr.BinaryOp, st: SymbolCtx): BState[Location.Name] = for {
-    t <- nextTmp
-    arg1 <- gen(node.arg1, st)
-    arg2 <- gen(node.arg2, st)
-    _ <- append(Copy.Mov(arg1, r10))
-    _ <- append(Copy.Mov(arg2, r11))
-    _ <- append(node.op match {
-      case ir.Op.Plus() => Arith.Add(r11, r10)
-      case ir.Op.Minus() => Arith.Sub(r11, r10)
-      case ir.Op.Times() => Arith.Imul(r11, r10)
-      case _ => throw new RuntimeException
-    })
-    _ <- append(Copy.Mov(r10, t))
-  } yield t
-
-  private def genDiv(node: ir.Expr.BinaryOp, st: SymbolCtx): BState[Location.Name] = for {
-    t <- nextTmp
-    arg1 <- gen(node.arg1, st)
-    arg2 <- gen(node.arg2, st)
-    _ <- append(Copy.Mov(0L, rdx))
-    _ <- append(Copy.Mov(arg1, rax))
-    _ <- append(Copy.Mov(arg2, r10))
-    _ <- append(Arith.Idiv(r10))
-    ret = node.op match {
-      case ir.Op.Div() => rax
-      case ir.Op.Mod() => rdx
+    op = node.op match {
+      case ir.Op.Eqq() => CmpOp.E
+      case ir.Op.Neq() => CmpOp.Ne
+      case ir.Op.Lt() => CmpOp.L
+      case ir.Op.Gt() => CmpOp.G
+      case ir.Op.Lte() => CmpOp.Le
+      case ir.Op.Gte() => CmpOp.Ge
       case _ => throw new RuntimeException
     }
-    _ <- append(Copy.Mov(ret, t))
+    _ <- append(Arith3.Cmp(op, arg1, arg2, t))
+  } yield t
+
+  private def genArith(node: ir.Expr.BinaryOp, st: SymbolCtx): BState[Location.Name] = for {
+    t <- nextTmp
+    arg1 <- gen(node.arg1, st)
+    arg2 <- gen(node.arg2, st)
+    _ <- append(node.op match {
+      case ir.Op.Plus() => Arith3.Add(arg1, arg2, t)
+      case ir.Op.Minus() => Arith3.Sub(arg1, arg2, t)
+      case ir.Op.Times() => Arith3.Mul(arg1, arg2, t)
+      case ir.Op.Div() => Arith3.Div(arg1, arg2, t)
+      case ir.Op.Mod() => Arith3.Mod(arg1, arg2, t)
+      case _ => throw new RuntimeException
+    })
   } yield t
 
   private implicit def gen(node: ir.Stmt, st: SymbolCtx): BState[Unit] = node match {
-    case n: ir.Stmt.Assign => genAssign(node, n.location, n.e, st)
-    case n: ir.Stmt.PlusAssign => genAssign(node, n.location, n.e, st)
-    case n: ir.Stmt.MinusAssign => genAssign(node, n.location, n.e, st)
+    case n: ir.Stmt.Assign => genAssign(n, st)
+    case n: ir.Stmt.PlusAssign => genAugmentedAssign(node, n.location, n.e, st)
+    case n: ir.Stmt.MinusAssign => genAugmentedAssign(node, n.location, n.e, st)
     case n: ir.Stmt.Cond => gen(n, st)
     case n: ir.Stmt.CallStmt => gen(n.call, st)
     case n: ir.Stmt.For => gen(n, st)
@@ -255,56 +222,36 @@ object LirGenerator {
     case n: ir.Stmt.Return => gen(n, st)
   }
 
-  private def genAssign(node: ir.Stmt, loc: ir.Location, e: ir.Expr, st: SymbolCtx): BState[Unit] = for {
-    // TODO may need some optimization when it comes to arrays
-    // l is var name for var, or temp storing addr for array
-    l <- loc match {
+  private def genAssign(node: ir.Stmt.Assign, st: SymbolCtx): BState[Unit] = for {
+    loc <- node.location match {
       case ir.Location.Var(id) => pure[Builder, Location.Name](idToName(id, st))
-      case cell: ir.Location.Cell => for {
-        addr <- genCellLoc(cell, st)
-        _ <- append(Copy.Lea(addr, r10))
-        t <- nextTmp
-        _ <- append(Copy.Mov(r10, t))
-      } yield t
+      case cell: ir.Location.Cell => genCellLoc(cell, st)
     }
-    // r is name for value o RHS
-    r <- gen(e, st)
-    // r10 is value of LHS
-    _ <- loc match {
-      case _: ir.Location.Var => append(Copy.Mov(l, r10))
-      case _: ir.Location.Cell => for {
-        t <- nextTmp
-        _ <- append(Copy.Mov(l, r11))
-        _ <- append(Copy.Mov(Location.Addr(Left(0L), Some(r11), None, 1L), r10))
-      } yield t
+    e <- gen(node.e, st)
+    _ <- append(Copy.Mov(e, loc))
+  } yield ()
+
+  private def genAugmentedAssign(node: ir.Stmt, loc: ir.Location, e: ir.Expr, st: SymbolCtx): BState[Unit] = for {
+    locAddr <- loc match {
+      case ir.Location.Var(id) => pure[Builder, Location.Name](idToName(id, st))
+      case cell: ir.Location.Cell => genCellLoc(cell, st)
     }
-    // r11 is value of RHS
-    _ <- append(Copy.Mov(r, r11))
-    // r10 is value to be assigned
-    _ <- node match {
-      case _: ir.Stmt.Assign => append(Copy.Mov(r11, r10))
-      case _: ir.Stmt.PlusAssign => append(Arith.Add(r11, r10))
-      case _: ir.Stmt.MinusAssign => append(Arith.Sub(r11, r10))
+    tLoc <- nextTmp
+    _ <- append(Copy.Mov(locAddr, tLoc))
+    tE <- gen(e, st)
+    _ <- append(node match {
+      case _: ir.Stmt.PlusAssign => Arith3.Add(tLoc, tE, locAddr)
+      case _: ir.Stmt.MinusAssign => Arith3.Sub(tLoc, tE, locAddr)
       case _ => throw new RuntimeException
-    }
-    // assign to l (if name) or address in l (if array)
-    _ <- loc match {
-      case _: ir.Location.Var => append(Copy.Mov(r10, l))
-      case _: ir.Location.Cell => for {
-        t <- nextTmp
-        _ <- append(Copy.Mov(l, r11))
-        _ <- append(Copy.Mov(r10, Location.Addr(Left(0L), Some(r11), None, 1L)))
-      } yield t
-    }
+    })
   } yield ()
 
   private def gen(node: ir.Stmt.Cond, st: SymbolCtx): BState[Unit] = for {
     p <- gen(node.p, st)
     lTrue <- nextCount >>| (".if_" + _ + "_true")
     lEnd <- getCount >>| (".if_" + _ + "_end")
-    _ <- append(Copy.Mov(p, r10))
-    _ <- append(Arith.Cmp(1L, r10))
-    _ <- append(Control.Je(lTrue))
+    _ <- append(Arith.Cmp(1L, p))
+    _ <- append(Control.Cjmp(CmpOp.E, lTrue))
     _ <- node.f match {
       case Some(f) => gen(f, st)
       case None => append(Control.Nop)
@@ -320,9 +267,8 @@ object LirGenerator {
     lTerminal <- getCount >>| (".while_" + _ + "_terminal")
     _ <- append(Control.Label(lCond))
     p <- gen(node.cond, st)
-    _ <- append(Copy.Mov(p, r10))
-    _ <- append(Arith.Cmp(1L, r10))
-    _ <- append(Control.Jne(lTerminal))
+    _ <- append(Arith.Cmp(1L, p))
+    _ <- append(Control.Cjmp(CmpOp.Ne, lTerminal))
     // Change break/continur jump targets when translating the body
     sBefore <- get
     _ <- put(sBefore.copy(break = lTerminal, continue = lCond))
@@ -340,18 +286,16 @@ object LirGenerator {
     i = idToName(node.index, st)
     start <- gen(node.start, st)
     stop <- gen(node.stop, st)
-    _ <- append(Copy.Mov(start, r10))
-    _ <- append(Copy.Mov(r10, i))
+    _ <- append(Copy.Mov(start, i))
     _ <- append(Control.Label(lCond))
-    _ <- append(Copy.Mov(i, r10))
-    _ <- append(Arith.Cmp(stop, r10))
-    _ <- append(Control.Jge(lTerminal))
+    _ <- append(Arith.Cmp(stop, i))
+    _ <- append(Control.Cjmp(CmpOp.Ge, lTerminal))
     sBefore <- get
     _ <- put(sBefore.copy(break = lTerminal, continue = lEnd))
     _ <- gen(node.body, st)
     _ <- update((s: Builder) => s.copy(break = sBefore.break, continue = sBefore.continue))
     _ <- append(Control.Label(lEnd))
-    _ <- append(Arith.Add(node.step.toLong, i))
+    _ <- append(Arith3.Add(i, node.step.toLong, i))
     _ <- append(Control.Jmp(lCond))
     _ <- append(Control.Label(lTerminal))
   } yield ()
@@ -366,34 +310,14 @@ object LirGenerator {
   } yield ()
 
   private def genCellLoc(node: ir.Location.Cell, st: SymbolCtx): BState[Location.Addr] = for {
-    tIndex <- gen(node.index, st)
-
     // Bound checking
+    tIndex <- gen(node.index, st)
     size = arraySize(node.id, st)
-    _ <- append(Copy.Mov(size, r10))
-    _ <- append(Copy.Mov(tIndex, r11))
-    _ <- append(Arith.Cmp(r10, r11))
-    _ <- append(Control.Jge(throwOOB))
-    _ <- append(Arith.Cmp(0L, r11))
-    _ <- append(Control.Jl(throwOOB))
-
-    // If local:
-    //   offset(%rbp, %10, wordsize)
-    // If global:
-    //   lea    label(%rip), %r11
-    //   (%r11, %r10, wordsize)
-    isGlobal = st(node.uid).findScope(node.id.name) match {
-      case Some(STScope.Global) => true
-      case _ => false
-    }
-    _ <- append(Copy.Mov(tIndex, r10))
-    _ <-
-    if (isGlobal) append(Copy.Lea(Location.Addr(Right(idToName(node.id, st)), Some(rip), None, 1L), r11))
-    else append(Control.Nop)
-  } yield if (isGlobal)
-    Location.Addr(Left(0L), Some(r11), Some(r10), Lir.wordSize)
-  else
-    Location.Addr(Right(idToName(node.id, st)), Some(rbp), Some(r10), Lir.wordSize)
+    _ <- append(Arith.Cmp(size, tIndex))
+    _ <- append(Control.Cjmp(CmpOp.Ge, throwOOB))
+    _ <- append(Arith.Cmp(0L, tIndex))
+    _ <- append(Control.Cjmp(CmpOp.L, throwOOB))
+  } yield Location.Array(idToName(node.id, st), tIndex)
 
   private def gen(node: ir.MethodCall, st: SymbolCtx): BState[Unit] = for {
     args <- genList(node.args, st)
@@ -405,10 +329,9 @@ object LirGenerator {
   private implicit def gen(node: ir.MethodArg, st: SymbolCtx): BState[Location.Name] = node match {
     case ir.MethodArg.ExprArg(e) => gen(e, st)
     case ir.MethodArg.StringArg(s) => for {
-      name <- declString(s) >>| Location.Name
+      name <- declString(s) >>| Source.Str
       t <- nextTmp
-      _ <- append(Copy.Lea(name, r10))
-      _ <- append(Copy.Mov(r10, t))
+      _ <- append(Copy.Mov(name, t))
     } yield t
   }
 
