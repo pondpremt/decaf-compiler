@@ -1,8 +1,8 @@
 #include <stdio.h>
 
 int main() {
-    long i = -1;
-    long j = 2;
-    printf("%ld", i/j);
+    int a[10];
+    a[0] = 1;
+    printf("%d\n", a[0]);
 }
 

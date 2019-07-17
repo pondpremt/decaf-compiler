@@ -25,7 +25,7 @@ object Location {
 
   final case class Name(name: String) extends Location
 
-  final case class Array(base: String, offset: String) extends Location
+  final case class Array(base: String, offset: Either[Name, Register]) extends Location
 
 }
 

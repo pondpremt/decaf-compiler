@@ -1,10 +1,10 @@
 package codegen
 
-import codegen.State._
+import codegen.LirGeneratorState._
 import lir.Conversion._
 import lir.Registers._
 import lir._
-import symboltable.{Descriptor, STScope, SymbolTable}
+import symboltable.{Descriptor, SymbolTable}
 import util.State.{get, pure, put, update}
 
 object LirGenerator {
@@ -309,7 +309,7 @@ object LirGenerator {
     _ <- append(Control.Ret)
   } yield ()
 
-  private def genCellLoc(node: ir.Location.Cell, st: SymbolCtx): BState[Location.Addr] = for {
+  private def genCellLoc(node: ir.Location.Cell, st: SymbolCtx): BState[Location.Array] = for {
     // Bound checking
     tIndex <- gen(node.index, st)
     size = arraySize(node.id, st)
@@ -317,7 +317,7 @@ object LirGenerator {
     _ <- append(Control.Cjmp(CmpOp.Ge, throwOOB))
     _ <- append(Arith.Cmp(0L, tIndex))
     _ <- append(Control.Cjmp(CmpOp.L, throwOOB))
-  } yield Location.Array(idToName(node.id, st), tIndex)
+  } yield Location.Array(idToName(node.id, st), Left(tIndex))
 
   private def gen(node: ir.MethodCall, st: SymbolCtx): BState[Unit] = for {
     args <- genList(node.args, st)

@@ -3,7 +3,7 @@ package codegen
 import lir._
 import util.State.{get, pure, put}
 
-object State {
+object LirGeneratorState {
 
   final case class Builder(code: List[Stmt],
                            decls: List[Local],

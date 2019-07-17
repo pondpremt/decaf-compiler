@@ -17,7 +17,7 @@ for file in `dirname $0`/input/*.dcf; do
   msg=""
   if runcompiler $file $asm 2>&1 >/dev/null; then
     binary=`tempfile`
-    if gcc -o $binary -L `dirname $0`/lib -l6035 $asm 2>&1 >/dev/null; then
+    if gcc -no-pie -o $binary -L `dirname $0`/lib -l6035 $asm 2>&1 >/dev/null; then
       output=`tempfile`
       $binary > $output
       exitcode=$?

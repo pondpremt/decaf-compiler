@@ -136,12 +136,13 @@ object Compiler {
       println(codegen.CodeGenerator.gen(asm1))
     }
 
-    // Resolve temporary names
-    val asm2 = codegen.VarResolver.run(asm1)
+    val asm2 = codegen.LirLowerer.lower(asm1)
+    val asm3 = codegen.VarResolver.run(asm2)
+    // val asm3 = asm2
 
     // Output to file
     val pw = new PrintWriter(new File(CLI.outfile))
-    pw.write(codegen.CodeGenerator.gen(asm2))
+    pw.write(codegen.CodeGenerator.gen(asm3))
     pw.close()
 
     asm2

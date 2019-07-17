@@ -20,7 +20,12 @@ final case class Str(name: String, text: String) extends Lir
 
 sealed abstract class Stmt
 
-sealed abstract class Copy extends Stmt
+sealed trait TwoOp extends Stmt {
+  val src: Source
+  val dst: Location
+}
+
+sealed abstract class Copy extends Stmt with TwoOp
 
 object Copy {
 
@@ -69,7 +74,11 @@ object Control {
 
 // TODO simplify LirGenerator to use Arith3
 
-sealed abstract class Arith3 extends Stmt
+sealed abstract class Arith3 extends Stmt {
+  val arg1: Source
+  val arg2: Source
+  val dst: Location
+}
 
 object Arith3 {
 
@@ -83,7 +92,7 @@ object Arith3 {
 
   final case class Mod(arg1: Source, arg2: Source, dst: Location) extends Arith3
 
-  final case class Cmp(op: CmpOp, arg1: Source, arg2: Source, dst: Location) extends Arith
+  final case class Cmp(op: CmpOp, arg1: Source, arg2: Source, dst: Location) extends Arith3
 
 }
 
@@ -91,9 +100,9 @@ sealed abstract class Arith extends Stmt
 
 object Arith {
 
-  final case class Add(src: Source, dst: Location) extends Arith
+  final case class Add(src: Source, dst: Location) extends Arith with TwoOp
 
-  final case class Sub(src: Source, dst: Location) extends Arith
+  final case class Sub(src: Source, dst: Location) extends Arith with TwoOp
 
   final case class Imul(src: Source, dst: Register) extends Arith
 
@@ -103,9 +112,9 @@ object Arith {
 
   final case class Shl(reg: Register) extends Arith
 
-  final case class Ror(src: Source, dst: Location) extends Arith
+  final case class Ror(src: Source, dst: Location) extends Arith with TwoOp
 
-  final case class Cmp(src: Source, dst: Location) extends Arith
+  final case class Cmp(src: Source, dst: Location) extends Arith with TwoOp
 
 }
 
