@@ -118,10 +118,13 @@ object LirGenerator {
       p <- gen(n.p, st)
       t <- gen(n.t, st)
       f <- gen(n.f, st)
+      lEnd <- nextCount >>| (".ternary_" + _ + "_end")
       tmp <- nextTmp
-      _ <- append(Arith.Cmp(1L, p))
+      _ <- append(Arith.Cmp(0L, p))
       _ <- append(Copy.Mov(f, tmp))
-      _ <- append(Copy.Cmov(CmpOp.E, t, tmp))
+      _ <- append(Control.Cjmp(CmpOp.E, lEnd))
+      _ <- append(Copy.Mov(t, tmp))
+      _ <- append(Control.Label(lEnd))
     } yield tmp
     case n: ir.Expr.Load => gen(n, st)
     case ir.Expr.Call(call) => for {
@@ -269,7 +272,7 @@ object LirGenerator {
     p <- gen(node.cond, st)
     _ <- append(Arith.Cmp(1L, p))
     _ <- append(Control.Cjmp(CmpOp.Ne, lTerminal))
-    // Change break/continur jump targets when translating the body
+    // Change break/continue jump targets when translating the body
     sBefore <- get
     _ <- put(sBefore.copy(break = lTerminal, continue = lCond))
     _ <- gen(node.body, st)
