@@ -46,6 +46,7 @@ object CodeGenerator {
     case Control.Ret => indent + "ret\n"
     case Control.Jmp(target) => indent + s"jmp\t$target\n"
     case Control.Cjmp(op, target) => indent + s"j${gen(op)}\t$target\n"
+    case Control.Throw(target) => indent + s"jmp\t$target\n"
     case Control.Syscall => indent + "syscall\n"
     case Control.Label(name) => s"$name:\n"
     case Control.Nop => ""

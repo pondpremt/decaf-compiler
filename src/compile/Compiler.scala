@@ -2,6 +2,7 @@ package compile
 import java.io._
 
 import antlr.ASTFactory
+import cfg.CfgConstructor
 import parsing.{ParseTree, TreeParser}
 import semanticchecking._
 import symboltable.{STBuilder, STListenerPair}
@@ -138,7 +139,16 @@ object Compiler {
 
     val asm2 = codegen.LirLowerer.lower(asm1)
     val asm3 = codegen.VarResolver.run(asm2)
-    // val asm3 = asm2
+
+
+    if (CLI.debug) {
+      println("CFG")
+      for ( method <- asm1.methods ) {
+        val graph = new CfgConstructor().construct(method.stmts)
+        println("Method" + method.name)
+        println(graph.toString)
+      }
+    }
 
     // Output to file
     val pw = new PrintWriter(new File(CLI.outfile))

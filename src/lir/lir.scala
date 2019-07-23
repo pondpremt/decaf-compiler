@@ -1,8 +1,12 @@
 package lir
 
-sealed abstract class Lir
+import util.WithUID
+
+sealed abstract class Lir extends WithUID
 
 object Lir {
+
+  type UID = WithUID.UID
 
   val wordSize: Long = 8
 

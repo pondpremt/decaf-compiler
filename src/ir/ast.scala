@@ -1,23 +1,14 @@
 package ir
 
-sealed abstract class Ir(implicit src: Source) {
+sealed abstract class Ir(implicit src: Source) extends util.WithUID {
 
   def getSource: Source = src
-
-  var uid: Ir.UID = Ir.newUid()
 
 }
 
 object Ir {
 
-  type UID = Long
-
-  private var uid: UID = 0L
-
-  private def newUid(): UID = {
-    uid += 1L;
-    uid
-  }
+  type UID = util.WithUID.UID
 
 }
 

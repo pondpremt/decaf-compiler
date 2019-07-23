@@ -2,22 +2,11 @@ package symboltable
 
 import ir.{FunctionType, PrimitiveType}
 
-sealed abstract class Descriptor {
-
-  val uid: Descriptor.UID = Descriptor.newUid()
-
-}
+sealed abstract class Descriptor extends util.WithUID
 
 object Descriptor {
 
-  type UID = Long
-
-  private var uid: UID = 0L
-
-  private def newUid(): UID = {
-    uid += 1;
-    uid
-  }
+  type UID = util.WithUID.UID
 
   final case class Variable(typ: PrimitiveType) extends Descriptor
 
