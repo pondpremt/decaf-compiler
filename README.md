@@ -1,8 +1,3 @@
-Hello! Welcome to the Scala Skeleton REPO.
+This is an compiler implementation for the Decaf language, written primarily in Scala. 
 
-The Antlr based parser code is in the parser directory. You'll also need to modify the Compiler.scala file in the
-src/compiler directory as you see fit.
-
-Happy parsing!
-
-Russell, Cam and Michael
+I worked on this project in the summer of 2019, out of curiosity about how a compiler works. I took the skeleton code and derived most of the approach from MIT 6.035: Computer Language Engineering class meterials. 
